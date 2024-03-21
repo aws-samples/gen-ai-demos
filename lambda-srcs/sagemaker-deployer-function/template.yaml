@@ -1,0 +1,15 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: An AWS Serverless Specification template describing your function.
+Resources:
+  SageMakerDeployerFunction:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: deployer.lambda_handler
+      Runtime: python3.9
+      Description: ''
+      MemorySize: 128
+      Timeout: 900
+      RuntimeManagementConfig:
+        UpdateRuntimeOn: Auto
+

@@ -1,0 +1,34 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  s3-cleanup-lambda
+
+  Sample SAM Template for s3-cleanup-lambda
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 180
+    MemorySize: 128
+
+Resources:
+  S3BucketCleanupFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      #CodeUri: waf-ops-s3bucket-10kk81dvkt5of #s3_bucket_cleanup_function/
+      Handler: s3_bucket_cleanup.lambda_handler
+      Runtime: python3.9
+      Architectures:
+        - x86_64
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  
+  S3BucketCleanupFunction:
+    Description: "S3 Bucket Cleanup Lambda Function ARN"
+    Value: !GetAtt S3BucketCleanupFunction.Arn
+  S3BucketCleanupFunctionIamRole:
+    Description: "Implicit IAM Role created for S3 Bucket Cleanup function"
+    Value: !GetAtt S3BucketCleanupFunctionRole.Arn
+

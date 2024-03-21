@@ -1,0 +1,4024 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Transform": "AWS::LanguageExtensions",
+    "Description": "Create stack for GenAI Samples Demo",
+    "Mappings": {
+        "ModelId2Instance": {
+            "ai21.j1-grande": {
+                "InstanceType": "ml.g5.12xlarge"
+            },
+            "ai21.j2-ultra": {
+                "InstanceType": "ml.p4d.24xlarge"
+            },
+            "huggingface-text2text-flan-t5-xl": {
+                "InstanceType": "ml.g5.2xlarge"
+            },
+            "huggingface-llm-falcon-7b-instruct-bf16": {
+                "InstanceType": "ml.g5.2xlarge"
+            },
+            "model-txt2img-stabilityai-stable-diffusion-v2-1-base": {
+                "InstanceType": "ml.p3.2xlarge"
+            },
+            "meta-textgeneration-llama-2-7b-f": {
+                "InstanceType": "ml.g5.2xlarge"
+            }
+        },
+        "ModelId2Type": {
+            "ai21.j1-grande": {
+                "ModelType": "ai21.jurassic1"
+            },
+            "ai21.j2-ultra": {
+                "ModelType": "ai21.jurassic2"
+            },
+            "huggingface-text2text-flan-t5-xl": {
+                "ModelType": "flan-t5"
+            },
+            "huggingface-llm-falcon-7b-instruct-bf16": {
+                "ModelType": "falcon"
+            },
+            "model-txt2img-stabilityai-stable-diffusion-v2-1-base": {
+                "ModelType": "stable-diffusion"
+            },
+            "meta-textgeneration-llama-2-7b-f": {
+                "ModelType": "Meta TextGeneration Llama-2-7b-f"
+            }
+        },
+        "ModelId2OpenType": {
+            "ai21.j1-grande": {
+                "OpenType": "proprietary"
+            },
+            "ai21.j2-ultra": {
+                "OpenType": "proprietary"
+            },
+            "huggingface-text2text-flan-t5-xl": {
+                "OpenType": "opensource"
+            },
+            "huggingface-llm-falcon-7b-instruct-bf16": {
+                "OpenType": "opensource"
+            },
+            "model-txt2img-stabilityai-stable-diffusion-v2-1-base": {
+                "OpenType": "opensource"
+            },
+            "meta-textgeneration-llama-2-7b-f": {
+                "OpenType": "opensource"
+            }
+        }
+    },
+    "Parameters": {
+        "LatestAmiId": {
+            "Type": "AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>",
+            "Default": "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2",
+            "Description": "Use an AMI of your choosing, we recommend to use the latest available"
+        },
+        "CognitoDomain": {
+            "Type": "String",
+            "MinLength": 3,
+            "MaxLength": 63,
+            "AllowedPattern": "^[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?$",
+            "Description": "Enter a string in lowercase. Must be alpha (lowercase) numeric 3-63 in length and should not have 'cognito'.",
+            "Default": "genai-cog"
+        },
+        "AdditionalUserAttributesForSignup": {
+            "Type": "CommaDelimitedList",
+            "Default": "background_color,dept,org",
+            "Description": "Additional Attributes required during user registration with Cognito"
+        },
+        "AllowedDomains": {
+            "Type": "String",
+            "Default": "amazon.com",
+            "Description": "Comma separated domain names"
+        },
+        "EnvPrefix": {
+            "Type": "String",
+            "Default": "env1",
+            "Description": "Unique identifier to distinguish between envs",
+            "AllowedPattern": "^[a-z0-9]([\\-a-z0-9]*[a-z0-9])?"
+        },
+        "GenAICodeBootstrapBucketName": {
+            "Type": "String",
+            "Default": "demo-squad-gen-ai-repo",
+            "Description": "S3 Bucket containing the Gen AI code samples and related artifacts for bootstrap, customizing and running the ECS containers for the sample application. This would be used to bootstrap and create the docker image if no public repo hosting the code samples is available/reachable.\n"
+        },
+        "JumpStartModelEndpointId": {
+            "Description": "Endpoint for a given model id (NOP - Jumpstart wont be deployed)",
+            "Type": "String",
+            "Default": "my-sagemaker-endpoint-1",
+            "AllowedPattern": "^[a-zA-Z0-9]([\\-a-zA-Z0-9]*[a-zA-Z0-9])?"
+        },
+        "PreferredBedrockModelType": {
+            "Description": "preferred bedrock model type",
+            "Type": "String",
+            "Default": "bedrock claude-v2:1",
+            "AllowedValues": [
+                "bedrock titan-text-lite",
+                "bedrock titan-text-express",
+                "bedrock claude-v2:1",
+                "bedrock claude-instant-v1",
+                "bedrock j2-ultra",
+                "bedrock j2-mid"
+            ]
+        },
+        "BedrockModelTypes": {
+            "Description": "preferred bedrock model type - order should match with corresponding BedrockModelIds",
+            "Type": "String",
+            "Default": "amazon.titan,anthropic.claude-v1,anthropic.claude-instant-v1,anthropic.claude-v2,anthropic.claude-v1-100k,anthropic.claude-v2-100k,ai21.j2-ultra,ai21.j2-mid"
+        },
+        "BedrockModelIDs": {
+            "Description": "preferred bedrock model ids, make sure the order matches the BedrockModelTypes and without space",
+            "Type": "String",
+            "Default": "amazon.titan-tg1-large,anthropic.claude-v1,anthropic.claude-instant-v1,anthropic.claude-v2,anthropic.claude-v1-100k,anthropic.claude-v2-100k,ai21.j2-ultra,ai21.j2-mid"
+        },
+        "JumpStartModelId": {
+            "Description": "Jumpstart model id (only if Jumpstart is indicated as preferred over Bedrock)",
+            "Type": "String",
+            "Default": "meta-textgeneration-llama-2-7b-f",
+            "AllowedValues": [
+                "huggingface-llm-falcon-7b-instruct-bf16",
+                "huggingface-text2text-flan-t5-xl",
+                "ai21.j2-mid",
+                "ai21.j2-ultra",
+                "meta-textgeneration-llama-2-7b-f"
+            ]
+        },
+        "StableDiffusionDeployment": {
+            "Type": "String",
+            "Default": false,
+            "Description": "Deploy StableDiffusion Model (only if Jumpstart is indicated as preferred over Bedrock)",
+            "AllowedValues": [
+                true,
+                false
+            ]
+        },
+        "PreferenceForModelType": {
+            "Type": "String",
+            "Default": "BEDROCK",
+            "Description": "Prefer Bedrock for running code samples. Deployment of Jumpstart model currently disabled.",
+            "AllowedValues": [
+                "BEDROCK"
+            ]
+        },
+        "StableDiffusionModelId": {
+            "Description": "Stable diffusion model id",
+            "Type": "String",
+            "Default": "model-txt2img-stabilityai-stable-diffusion-v2-1-base",
+            "AllowedValues": [
+                "model-txt2img-stabilityai-stable-diffusion-v2-1-base"
+            ]
+        },
+        "StableDiffusionModelEndpointId": {
+            "Description": "Endpoint for a given StableDiffusion model id",
+            "Type": "String",
+            "Default": "stable-diffusion-endpoint-1",
+            "AllowedPattern": "^[a-zA-Z0-9]([\\-a-zA-Z0-9]*[a-zA-Z0-9])?"
+        },
+        "ContainerPort": {
+            "Type": "Number",
+            "Default": 8080,
+            "Description": "Port number where the service is running"
+        },
+        "ContainerCpu": {
+            "Type": "Number",
+            "Default": 1024,
+            "Description": "How much CPU to give the container ()1024 is 1 CPU)"
+        },
+        "ContainerMemory": {
+            "Type": "Number",
+            "Default": 2048,
+            "Description": "How much memory (in MB) to give the container"
+        },
+        "DesiredCount": {
+            "Type": "Number",
+            "Default": 1,
+            "Description": "Copies of the service task to run."
+        },
+        "S3BucketCleanupLambdaS3Key": {
+            "Description": "The name of the S3 Bucket Cleanup Lambda ZIP package (dont change)",
+            "Type": "String",
+            "Default": "s3-bucket-cleanup-lambda.zip"
+        },
+        "SMDeployerLambdaS3Key": {
+            "Description": "The name of the Sagemaker Deployer Lambda ZIP package (dont change)",
+            "Type": "String",
+            "Default": "sagemaker-jumpstart-deployer-lambda.zip"
+        },
+        "GenAIKendraEdition": {
+            "Type": "String",
+            "Default": "DEVELOPER_EDITION",
+            "AllowedPattern": "^(DEVELOPER|ENTERPRISE)_EDITION"
+        },
+        "GenAIPublicGithubRepo": {
+            "Type": "String",
+            "Default": "https://github.com/aws-samples/gen-ai-samples"
+        },
+        "DemoSquadGenAICodeSampleZip": {
+            "Type": "String",
+            "Default": "gen-ai-code.zip"
+        },
+        "GenAISampleECRRepo": {
+            "Type": "String",
+            "Default": "gen-ai-sample-repo",
+            "Description": "ECR Repo name hosting the Gen AI sample container images (can be edited)"
+        },
+        "GenAISampleDockerImagePrefix": {
+            "Type": "String",
+            "Default": "gen-ai-sample",
+            "Description": "ECR Repo name hosting the Gen AI sample container images (can be edited)"
+        },
+        "GenAISampleDockerVersion": {
+            "Type": "String",
+            "Default": "0.1",
+            "Description": "Default version of Gen AI sample container image (can be edited)"
+        }
+    },
+    "Conditions": {
+        "EnabledStableDiffusion": {
+            "Fn::Equals": [
+                {
+                    "Ref": "StableDiffusionDeployment"
+                },
+                true
+            ]
+        },
+        "DeployJumpStart": {
+            "Fn::Equals": [
+                {
+                    "Ref": "PreferenceForModelType"
+                },
+                "JUMPSTART01"
+            ]
+        },
+        "DeployStableDiffusion": {
+            "Fn::And": [
+                {
+                    "Condition": "EnabledStableDiffusion"
+                },
+                {
+                    "Condition": "DeployJumpStart"
+                }
+            ]
+        }
+    },
+    "Resources": {
+        "GenAIDemoUserGroup1": {
+            "Type": "AWS::IAM::Group"
+        },
+        "GenAIDemoUser1": {
+            "Type": "AWS::IAM::User",
+            "Properties": {
+                "Path": "/genai/",
+                "Groups": [
+                    {
+                        "Ref": "GenAIDemoUserGroup1"
+                    }
+                ],
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AdministratorAccess"
+                ]
+            }
+        },
+        "GenAIDemoUser1Credentials": {
+            "Type": "AWS::IAM::AccessKey",
+            "Properties": {
+                "Status": "Active",
+                "UserName": {
+                    "Ref": "GenAIDemoUser1"
+                }
+            }
+        },
+        "GenAIDemoUser1CredentialsStored": {
+            "Type": "AWS::SecretsManager::Secret",
+            "Properties": {
+                "Name": {
+                    "Fn::Sub": "/${EnvPrefix}/genai/credentials/${GenAIDemoUser1}"
+                },
+                "SecretString": {
+                    "Fn::Sub": "{\"ACCESS_KEY\": \"${GenAIDemoUser1Credentials}\",\"SECRET_KEY\": \"${GenAIDemoUser1Credentials.SecretAccessKey}\"}"
+                }
+            }
+        },
+        "GenAISMServiceRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AmazonRekognitionFullAccess",
+                    "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess",
+                    "arn:aws:iam::aws:policy/AmazonTranscribeFullAccess",
+                    "arn:aws:iam::aws:policy/AmazonKendraFullAccess",
+                    "arn:aws:iam::aws:policy/AmazonLexFullAccess",
+                    "arn:aws:iam::aws:policy/ComprehendFullAccess",
+                    "arn:aws:iam::aws:policy/AmazonS3FullAccess",
+                    "arn:aws:iam::aws:policy/AmazonSageMakerCanvasFullAccess"
+                ],
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "sagemaker.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "bedrock.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "transcribe.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": [
+                                    {
+                                        "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:root"
+                                    }
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/service-role/",
+                "Policies": [
+                    {
+                        "PolicyName": "SagemakerPolicy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:CreateLogGroup",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Resource": [
+                                        {
+                                            "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:user/aws/sagemaker/*"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "s3:Get*",
+                                        "s3:Put*",
+                                        "s3:Delete*",
+                                        "s3:List*"
+                                    ],
+                                    "Resource": [
+                                        "arn:aws:s3:::*",
+                                        "arn:aws:s3:::*/*"
+                                    ]
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "neptune-db:Create*",
+                                        "neptune-db:Describe*",
+                                        "neptune-db:Delete*",
+                                        "neptune-db:Get*",
+                                        "neptune-db:Invoke*",
+                                        "neptune-db:List*",
+                                        "neptune-db:Start*",
+                                        "neptune-db:Write*",
+                                        "neptune-db:Read*",
+                                        "neptune-db:connect",
+                                        "neptune-db:Cancel*",
+                                        "neptune-db:Manage*",
+                                        "neptune-db:Reset*"
+                                    ],
+                                    "Resource": [
+                                        {
+                                            "Fn::Sub": "arn:aws:neptune-db::${AWS::AccountId}:*"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "aws-marketplace:ViewSubscriptions"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "iam:ListRoles",
+                                        "iam:CreateRole",
+                                        "iam:CreatePolicy",
+                                        "iam:AttachRolePolicy"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "sagemaker:Add*",
+                                        "sagemaker:Create*",
+                                        "sagemaker:Describe*",
+                                        "sagemaker:Delete*",
+                                        "sagemaker:Get*",
+                                        "sagemaker:Invoke*",
+                                        "sagemaker:List*",
+                                        "sagemaker:Start*",
+                                        "sagemaker:Stop*",
+                                        "sagemaker:Update*",
+                                        "bedrock:Create*",
+                                        "bedrock:Describe*",
+                                        "bedrock:Delete*",
+                                        "bedrock:Get*",
+                                        "bedrock:Put*",
+                                        "bedrock:Invoke*",
+                                        "bedrock:List*",
+                                        "bedrock:Start*",
+                                        "bedrock:Stop*",
+                                        "bedrock:Ret*",
+                                        "bedrock:Update*",
+                                        "lambda:InvokeFunction",
+                                        "kms:Decrypt",
+                                        "kms:DescribeKey",
+                                        "kms:Encrypt",
+                                        "kms:GenerateDataKey*",
+                                        "kms:ReEncrypt*"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "iam:PassRole"
+                                    ],
+                                    "Resource": {
+                                        "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:*"
+                                    },
+                                    "Condition": {
+                                        "StringEquals": {
+                                            "iam:PassedToService": "sagemaker.amazonaws.com"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "S3BucketCleanupLambdaRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "LambdaRolePolicy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:CreateLogGroup",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Resource": [
+                                        {
+                                            "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+                                        },
+                                        {
+                                            "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "s3:GetObject*",
+                                        "s3:ListBucket*",
+                                        "s3:DeleteObject*",
+                                        "s3:GetBucket*"
+                                    ],
+                                    "Resource": [
+                                        "arn:aws:s3:::*",
+                                        "arn:aws:s3:::*/*"
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "LoggingS3BucketCleanupOnDelete": {
+            "Type": "Custom::S3BucketCleanup",
+            "Properties": {
+                "ServiceToken": {
+                    "Fn::GetAtt": [
+                        "S3BucketCleanupLambda",
+                        "Arn"
+                    ]
+                },
+                "BucketName": {
+                    "Ref": "LoggingBucket"
+                }
+            }
+        },
+        "LambdaArtifactsS3BucketCleanupOnDelete": {
+            "Type": "Custom::S3BucketCleanup",
+            "Properties": {
+                "ServiceToken": {
+                    "Fn::GetAtt": [
+                        "S3BucketCleanupLambda",
+                        "Arn"
+                    ]
+                },
+                "BucketName": {
+                    "Ref": "GenAILambdaArtifactsS3Bucket"
+                }
+            }
+        },
+        "SearchInterpreterS3BucketCleanupOnDelete": {
+            "Type": "Custom::S3BucketCleanup",
+            "Properties": {
+                "ServiceToken": {
+                    "Fn::GetAtt": [
+                        "S3BucketCleanupLambda",
+                        "Arn"
+                    ]
+                },
+                "BucketName": {
+                    "Ref": "GenAISearchInterpreterS3Bucket"
+                }
+            }
+        },
+        "GenAITestS3BucketCleanupOnDelete": {
+            "Type": "Custom::S3BucketCleanup",
+            "Properties": {
+                "ServiceToken": {
+                    "Fn::GetAtt": [
+                        "S3BucketCleanupLambda",
+                        "Arn"
+                    ]
+                },
+                "BucketName": {
+                    "Ref": "GenAITestS3Bucket"
+                }
+            }
+        },
+        "S3BucketCleanupLambda": {
+            "Type": "AWS::Lambda::Function",
+            "DependsOn": "HelperEC2Instance",
+            "Properties": {
+                "Handler": "s3_bucket_cleanup.lambda_handler",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "S3BucketCleanupLambdaRole",
+                        "Arn"
+                    ]
+                },
+                "Description": "Invoke a Lambda function to cleanup S3 bucket contents.",
+                "Runtime": "python3.9",
+                "MemorySize": 128,
+                "Timeout": 180,
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "GenAILambdaArtifactsS3Bucket"
+                    },
+                    "S3Key": {
+                        "Ref": "S3BucketCleanupLambdaS3Key"
+                    }
+                }
+            }
+        },
+        "PresignupValidationLambdaRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "LambdaRolePolicy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": "logs:CreateLogGroup",
+                                    "Resource": {
+                                        "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+                                    }
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Resource": {
+                                        "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "PresignupValidationLambda": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Handler": "index.lambda_handler",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "PresignupValidationLambdaRole",
+                        "Arn"
+                    ]
+                },
+                "Description": "Invoke a Lambda function to validate email signups.",
+                "Runtime": "python3.9",
+                "MemorySize": 128,
+                "Timeout": 60,
+                "Environment": {
+                    "Variables": {
+                        "ALLOWED_DOMAINS": {
+                            "Ref": "AllowedDomains"
+                        }
+                    }
+                },
+                "Code": {
+                    "ZipFile": "import os\n\naws_region = os.environ.get('AWS_REGION')\nallowedDomains = os.environ.get('ALLOWED_DOMAINS').split(',')\n\ndef lambda_handler(event, context):\n\n  event['response']['autoConfirmUser'] = False\n  emailAddr = event['request']['userAttributes']['email'].split('@')\n  userEmailDomain = emailAddr[1]\n  if userEmailDomain in allowedDomains:\n    event['response']['autoConfirmUser'] = True\n    return event\n  \n  raise Exception(\"Invalid email domain\")\n"
+                }
+            }
+        },
+        "UserPool": {
+            "Type": "AWS::Cognito::UserPool",
+            "Properties": {
+                "UsernameConfiguration": {
+                    "CaseSensitive": false
+                },
+                "AutoVerifiedAttributes": [
+                    "email"
+                ],
+                "AliasAttributes": [
+                    "email"
+                ],
+                "UserPoolName": {
+                    "Fn::Sub": "${CognitoDomain}-user-pool"
+                },
+                "Schema": [
+                    {
+                        "Name": "email",
+                        "AttributeDataType": "String",
+                        "Mutable": false,
+                        "Required": true
+                    },
+                    {
+                        "Name": "name",
+                        "AttributeDataType": "String",
+                        "Mutable": true,
+                        "Required": true
+                    },
+                    {
+                        "Name": "dept",
+                        "AttributeDataType": "String",
+                        "Mutable": true,
+                        "Required": false
+                    },
+                    {
+                        "Name": "org",
+                        "AttributeDataType": "String",
+                        "Mutable": true,
+                        "Required": false
+                    },
+                    {
+                        "Name": "background_color",
+                        "AttributeDataType": "String",
+                        "Mutable": true,
+                        "Required": false
+                    }
+                ]
+            }
+        },
+        "CognitoLambdaInvokePermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Fn::GetAtt": [
+                        "PresignupValidationLambda",
+                        "Arn"
+                    ]
+                },
+                "Principal": "cognito-idp.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Sub": "arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPool}"
+                }
+            }
+        },
+        "UserPoolResourceServer": {
+            "Type": "AWS::Cognito::UserPoolResourceServer",
+            "Properties": {
+                "UserPoolId": {
+                    "Ref": "UserPool"
+                },
+                "Identifier": "genai-cog",
+                "Name": "genai-cog",
+                "Scopes": [
+                    {
+                        "ScopeName": "read",
+                        "ScopeDescription": "GET"
+                    },
+                    {
+                        "ScopeName": "write",
+                        "ScopeDescription": "POST"
+                    }
+                ]
+            }
+        },
+        "UserPoolClient": {
+            "Type": "AWS::Cognito::UserPoolClient",
+            "DependsOn": "UserPoolResourceServer",
+            "Properties": {
+                "UserPoolId": {
+                    "Ref": "UserPool"
+                },
+                "AllowedOAuthFlowsUserPoolClient": true,
+                "CallbackURLs": [
+                    {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "https://",
+                                {
+                                    "Fn::GetAtt": [
+                                        "GenAISamplesCFDistribution",
+                                        "DomainName"
+                                    ]
+                                }
+                            ]
+                        ]
+                    }
+                ],
+                "AllowedOAuthFlows": [
+                    "code",
+                    "implicit"
+                ],
+                "AllowedOAuthScopes": [
+                    "phone",
+                    "email",
+                    "openid",
+                    "profile",
+                    "genai-cog/read",
+                    "genai-cog/write"
+                ],
+                "SupportedIdentityProviders": [
+                    "COGNITO"
+                ],
+                "GenerateSecret": true
+            }
+        },
+        "UserPoolDomain": {
+            "Type": "AWS::Cognito::UserPoolDomain",
+            "Properties": {
+                "Domain": {
+                    "Ref": "CognitoDomain"
+                },
+                "UserPoolId": {
+                    "Ref": "UserPool"
+                }
+            }
+        },
+        "GenAISamplesCFDistribution": {
+            "Type": "AWS::CloudFront::Distribution",
+            "Properties": {
+                "DistributionConfig": {
+                    "Origins": [
+                        {
+                            "Id": "gen-ai-samples-elb-origin",
+                            "DomainName": {
+                                "Fn::GetAtt": [
+                                    "PublicLoadBalancer",
+                                    "DNSName"
+                                ]
+                            },
+                            "CustomOriginConfig": {
+                                "HTTPPort": "8080",
+                                "OriginProtocolPolicy": "http-only"
+                            },
+                            "OriginCustomHeaders": [
+                                {
+                                    "HeaderName": "X-Custom-Header",
+                                    "HeaderValue": {
+                                        "Fn::Select": [
+                                            2,
+                                            {
+                                                "Fn::Split": [
+                                                    "/",
+                                                    {
+                                                        "Ref": "AWS::StackId"
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    "Enabled": "true",
+                    "Comment": {
+                        "Fn::Sub": "CloudFront distribution for GenAI samples stack ${AWS::StackName}"
+                    },
+                    "HttpVersion": "http2",
+                    "DefaultCacheBehavior": {
+                        "TargetOriginId": "gen-ai-samples-elb-origin",
+                        "OriginRequestPolicyId": "216adef6-5c7f-47e4-b989-5492eafa07d3",
+                        "CachePolicyId": "658327ea-f89d-4fab-a63d-7e88639e58f6",
+                        "ResponseHeadersPolicyId": "60669652-455b-4ae9-85a4-c4c02393f86c",
+                        "ViewerProtocolPolicy": "redirect-to-https",
+                        "AllowedMethods": [
+                            "DELETE",
+                            "GET",
+                            "HEAD",
+                            "OPTIONS",
+                            "PATCH",
+                            "POST",
+                            "PUT"
+                        ]
+                    }
+                }
+            }
+        },
+        "GenAISMDeployerLambdaRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com",
+                                    "sagemaker.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "LambdaRolePolicy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:CreateLogGroup",
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Resource": [
+                                        {
+                                            "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+                                        },
+                                        {
+                                            "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "s3:GetObject",
+                                        "s3:PutObject",
+                                        "s3:DeleteObject",
+                                        "s3:ListBucket"
+                                    ],
+                                    "Resource": [
+                                        "arn:aws:s3:::*",
+                                        "arn:aws:s3:::*/*"
+                                    ]
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "aws-marketplace:ViewSubscriptions"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "iam:ListRoles",
+                                        "iam:CreateRole",
+                                        "iam:CreatePolicy",
+                                        "iam:AttachRolePolicy"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "sagemaker:Add*",
+                                        "sagemaker:Create*",
+                                        "sagemaker:Describe*",
+                                        "sagemaker:Delete*",
+                                        "sagemaker:Get*",
+                                        "sagemaker:Invoke*",
+                                        "sagemaker:List*",
+                                        "sagemaker:Start*",
+                                        "sagemaker:Stop*",
+                                        "sagemaker:Update*",
+                                        "lambda:InvokeFunction"
+                                    ],
+                                    "Resource": [
+                                        {
+                                            "Fn::Sub": "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:*"
+                                        },
+                                        {
+                                            "Fn::Sub": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:*"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "iam:PassRole"
+                                    ],
+                                    "Resource": {
+                                        "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:*"
+                                    },
+                                    "Condition": {
+                                        "StringEquals": {
+                                            "iam:PassedToService": "sagemaker.amazonaws.com"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "SageMakerJumpStartDeployment": {
+            "Type": "Custom::SageMakerDeployment",
+            "Condition": "DeployJumpStart",
+            "Properties": {
+                "ServiceToken": {
+                    "Fn::GetAtt": [
+                        "SageMakerDeployerFunction",
+                        "Arn"
+                    ]
+                },
+                "SMDeployerRole": {
+                    "Fn::Join": [
+                        "/",
+                        [
+                            "service-role",
+                            {
+                                "Ref": "GenAISMServiceRole"
+                            }
+                        ]
+                    ]
+                },
+                "EndpointName": {
+                    "Ref": "JumpStartModelEndpointId"
+                },
+                "ModelId": {
+                    "Ref": "JumpStartModelId"
+                },
+                "ModelType": {
+                    "Fn::FindInMap": [
+                        "ModelId2OpenType",
+                        {
+                            "Ref": "JumpStartModelId"
+                        },
+                        "OpenType"
+                    ]
+                },
+                "InstanceType": {
+                    "Fn::FindInMap": [
+                        "ModelId2Instance",
+                        {
+                            "Ref": "JumpStartModelId"
+                        },
+                        "InstanceType"
+                    ]
+                }
+            }
+        },
+        "StableDiffusionJumpStartDeployment": {
+            "Type": "Custom::SageMakerDeployment",
+            "Condition": "DeployStableDiffusion",
+            "Properties": {
+                "ServiceToken": {
+                    "Fn::GetAtt": [
+                        "SageMakerDeployerFunction",
+                        "Arn"
+                    ]
+                },
+                "SMDeployerRole": {
+                    "Fn::Join": [
+                        "/",
+                        [
+                            "service-role",
+                            {
+                                "Ref": "GenAISMServiceRole"
+                            }
+                        ]
+                    ]
+                },
+                "EndpointName": {
+                    "Fn::Sub": "${StableDiffusionModelEndpointId}"
+                },
+                "ModelId": {
+                    "Ref": "StableDiffusionModelId"
+                },
+                "ModelType": {
+                    "Fn::FindInMap": [
+                        "ModelId2OpenType",
+                        {
+                            "Ref": "StableDiffusionModelId"
+                        },
+                        "OpenType"
+                    ]
+                },
+                "InstanceType": {
+                    "Fn::FindInMap": [
+                        "ModelId2Instance",
+                        {
+                            "Ref": "StableDiffusionModelId"
+                        },
+                        "InstanceType"
+                    ]
+                }
+            }
+        },
+        "SageMakerDeployerFunction": {
+            "Type": "AWS::Lambda::Function",
+            "DependsOn": "HelperEC2Instance",
+            "Properties": {
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "GenAILambdaArtifactsS3Bucket"
+                    },
+                    "S3Key": {
+                        "Ref": "SMDeployerLambdaS3Key"
+                    }
+                },
+                "Handler": "deployer.lambda_handler",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "GenAISMDeployerLambdaRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "python3.9",
+                "MemorySize": 128,
+                "Timeout": 900
+            }
+        },
+        "GenAISamplesVPC": {
+            "Type": "AWS::EC2::VPC",
+            "Properties": {
+                "CidrBlock": "10.0.0.0/16",
+                "EnableDnsSupport": "true",
+                "EnableDnsHostnames": "true",
+                "InstanceTenancy": "default",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "-",
+                                [
+                                    "GenAISamplesVPC",
+                                    {
+                                        "Fn::Select": [
+                                            2,
+                                            {
+                                                "Fn::Split": [
+                                                    "-",
+                                                    {
+                                                        "Fn::Select": [
+                                                            2,
+                                                            {
+                                                                "Fn::Split": [
+                                                                    "/",
+                                                                    {
+                                                                        "Ref": "AWS::StackId"
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "VPCNACL": {
+            "Type": "AWS::EC2::NetworkAcl",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "GenAISamplesVPC"
+                }
+            }
+        },
+        "InboundHTTP8080Rule": {
+            "Type": "AWS::EC2::NetworkAclEntry",
+            "Properties": {
+                "NetworkAclId": {
+                    "Ref": "VPCNACL"
+                },
+                "RuleNumber": 101,
+                "Protocol": 6,
+                "RuleAction": "allow",
+                "Egress": "false",
+                "CidrBlock": "0.0.0.0/0",
+                "PortRange": {
+                    "From": 8080,
+                    "To": 8080
+                }
+            }
+        },
+        "InboundHTTP443Rule": {
+            "Type": "AWS::EC2::NetworkAclEntry",
+            "Properties": {
+                "NetworkAclId": {
+                    "Ref": "VPCNACL"
+                },
+                "RuleNumber": 102,
+                "Protocol": 6,
+                "RuleAction": "allow",
+                "Egress": "false",
+                "CidrBlock": "0.0.0.0/0",
+                "PortRange": {
+                    "From": 443,
+                    "To": 443
+                }
+            }
+        },
+        "InboundHTTP80Rule": {
+            "Type": "AWS::EC2::NetworkAclEntry",
+            "Properties": {
+                "NetworkAclId": {
+                    "Ref": "VPCNACL"
+                },
+                "RuleNumber": 103,
+                "Protocol": 6,
+                "RuleAction": "allow",
+                "Egress": "false",
+                "CidrBlock": "0.0.0.0/0",
+                "PortRange": {
+                    "From": 80,
+                    "To": 80
+                }
+            }
+        },
+        "OutboundRule": {
+            "Type": "AWS::EC2::NetworkAclEntry",
+            "Properties": {
+                "NetworkAclId": {
+                    "Ref": "VPCNACL"
+                },
+                "RuleNumber": 101,
+                "Protocol": -1,
+                "Egress": true,
+                "RuleAction": "allow",
+                "CidrBlock": "0.0.0.0/0"
+            }
+        },
+        "GenAISamplesIGW": {
+            "Type": "AWS::EC2::InternetGateway",
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "GenAISamplesIGW"
+                    }
+                ]
+            }
+        },
+        "AttachGateway": {
+            "Type": "AWS::EC2::VPCGatewayAttachment",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "GenAISamplesVPC"
+                },
+                "InternetGatewayId": {
+                    "Ref": "GenAISamplesIGW"
+                }
+            }
+        },
+        "GenAISamplesSubnet1": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "GenAISamplesVPC"
+                },
+                "CidrBlock": "10.0.0.0/24",
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        "0",
+                        {
+                            "Fn::GetAZs": {
+                                "Ref": "AWS::Region"
+                            }
+                        }
+                    ]
+                },
+                "MapPublicIpOnLaunch": "true",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "GenAISamplesSubnet1"
+                    }
+                ]
+            }
+        },
+        "GenAISamplesSubnet2": {
+            "Type": "AWS::EC2::Subnet",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "GenAISamplesVPC"
+                },
+                "CidrBlock": "10.0.1.0/24",
+                "AvailabilityZone": {
+                    "Fn::Select": [
+                        "1",
+                        {
+                            "Fn::GetAZs": {
+                                "Ref": "AWS::Region"
+                            }
+                        }
+                    ]
+                },
+                "MapPublicIpOnLaunch": "true",
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "GenAISamplesSubnet2"
+                    }
+                ]
+            }
+        },
+        "GenAISamplesPublicRouteTable": {
+            "Type": "AWS::EC2::RouteTable",
+            "Properties": {
+                "VpcId": {
+                    "Ref": "GenAISamplesVPC"
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "GenAISamplesPublicRoute"
+                    }
+                ]
+            }
+        },
+        "GenAISamplesPublicRoute": {
+            "Type": "AWS::EC2::Route",
+            "DependsOn": [
+                "AttachGateway"
+            ],
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "GenAISamplesPublicRouteTable"
+                },
+                "GatewayId": {
+                    "Ref": "GenAISamplesIGW"
+                },
+                "DestinationCidrBlock": "0.0.0.0/0"
+            }
+        },
+        "GenAISamplesPublicSubnetRouteTableAssoc1": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "GenAISamplesPublicRouteTable"
+                },
+                "SubnetId": {
+                    "Ref": "GenAISamplesSubnet1"
+                }
+            }
+        },
+        "GenAISamplesPublicSubnetRouteTableAssoc2": {
+            "Type": "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "GenAISamplesPublicRouteTable"
+                },
+                "SubnetId": {
+                    "Ref": "GenAISamplesSubnet2"
+                }
+            }
+        },
+        "EC2SecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Open App access",
+                "VpcId": {
+                    "Ref": "GenAISamplesVPC"
+                },
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8080,
+                        "ToPort": 8080,
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 443,
+                        "ToPort": 443,
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 80,
+                        "ToPort": 80,
+                        "CidrIp": "0.0.0.0/0"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "GenAISamplesEC2SG"
+                    }
+                ]
+            }
+        },
+        "FargateContainerSecurityGroup": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Open App access",
+                "VpcId": {
+                    "Ref": "GenAISamplesVPC"
+                },
+                "SecurityGroupIngress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8080,
+                        "ToPort": 8080,
+                        "SourceSecurityGroupId": {
+                            "Ref": "PublicLoadBalancerSG"
+                        }
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 443,
+                        "ToPort": 443,
+                        "SourceSecurityGroupId": {
+                            "Ref": "PublicLoadBalancerSG"
+                        }
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 80,
+                        "ToPort": 80,
+                        "SourceSecurityGroupId": {
+                            "Ref": "PublicLoadBalancerSG"
+                        }
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 8080,
+                        "ToPort": 8080,
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 80,
+                        "ToPort": 80,
+                        "CidrIp": "0.0.0.0/0"
+                    },
+                    {
+                        "IpProtocol": "tcp",
+                        "FromPort": 443,
+                        "ToPort": 443,
+                        "CidrIp": "0.0.0.0/0"
+                    }
+                ]
+            }
+        },
+        "S3Policy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "S3Policy",
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "s3:GetBucketLocation",
+                                "s3:GetObject",
+                                "s3:GetObjectAcl",
+                                "s3:PutObject",
+                                "s3:PutObjectAcl",
+                                "s3:ListBucket*"
+                            ],
+                            "Resource": [
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAICodeBootstrapBucketName"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAICodeBootstrapBucketName"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAILambdaArtifactsS3Bucket"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAILambdaArtifactsS3Bucket"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAITestS3Bucket"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAITestS3Bucket"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "LoggingBucket"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "LoggingBucket"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAISearchInterpreterS3Bucket"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAISearchInterpreterS3Bucket"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "Roles": [
+                    {
+                        "Ref": "S3EC2ImportRole"
+                    }
+                ]
+            }
+        },
+        "ECRPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "ECRPolicy",
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "ecr:Batch*",
+                                "ecr:Create*",
+                                "ecr:Complete*",
+                                "ecr:Describe*",
+                                "ecr:Delete*",
+                                "ecr:Get*",
+                                "ecr:Invoke*",
+                                "ecr:List*",
+                                "ecr:Put*",
+                                "ecr:Set*",
+                                "ecr:Start*",
+                                "ecr:Stop*",
+                                "ecr:Up*",
+                                "ecr:Init*"
+                            ],
+                            "Resource": "*"
+                        }
+                    ]
+                },
+                "Roles": [
+                    {
+                        "Ref": "S3EC2ImportRole"
+                    }
+                ]
+            }
+        },
+        "KMSPolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "KMSDataKeyPolicy",
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "kms:Gen*",
+                                "kms:Decrypt"
+                            ],
+                            "Resource": {
+                                "Fn::Sub": "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*"
+                            }
+                        }
+                    ]
+                },
+                "Roles": [
+                    {
+                        "Ref": "S3EC2ImportRole"
+                    }
+                ]
+            }
+        },
+        "S3EC2ImportRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ec2.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+                    "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
+                ],
+                "Path": "/"
+            }
+        },
+        "GenAISamplesS3DatasourcePolicy": {
+            "Type": "AWS::IAM::ManagedPolicy",
+            "Properties": {
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "s3:GetBucketLocation",
+                                "s3:GetObject",
+                                "s3:GetObjectAcl",
+                                "s3:PutObject",
+                                "s3:PutObjectAcl",
+                                "s3:ListBucket*",
+                                "s3:Batch*"
+                            ],
+                            "Resource": [
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAITestS3Bucket"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAITestS3Bucket"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAISearchInterpreterS3Bucket"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAISearchInterpreterS3Bucket"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAILambdaArtifactsS3Bucket"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAILambdaArtifactsS3Bucket"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        "GenAISamplesS3DatasourceRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ec2.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    {
+                        "Ref": "GenAISamplesS3DatasourcePolicy"
+                    }
+                ],
+                "Path": "/"
+            }
+        },
+        "GenAISamplesKendraRolePolicy": {
+            "Type": "AWS::IAM::ManagedPolicy",
+            "Properties": {
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": "cloudwatch:PutMetricData",
+                            "Resource": "*",
+                            "Condition": {
+                                "StringEquals": {
+                                    "cloudwatch:namespace": "AWS/Kendra"
+                                }
+                            }
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": "logs:CreateLogGroup",
+                            "Resource": {
+                                "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/kendra/*"
+                            }
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "logs:DescribeLogStreams",
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents"
+                            ],
+                            "Resource": {
+                                "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/kendra/*:log-stream:*"
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "GenAISamplesKendraRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "kendra.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    {
+                        "Ref": "GenAISamplesKendraRolePolicy"
+                    },
+                    {
+                        "Ref": "GenAISamplesS3DatasourcePolicy"
+                    }
+                ],
+                "Path": "/"
+            }
+        },
+        "GenAISamplesBuilderEC2InstanceProfile": {
+            "Type": "AWS::IAM::InstanceProfile",
+            "Properties": {
+                "Path": "/",
+                "Roles": [
+                    {
+                        "Ref": "S3EC2ImportRole"
+                    }
+                ]
+            }
+        },
+        "S3KMSKey": {
+            "Type": "AWS::KMS::Key",
+            "Properties": {
+                "EnableKeyRotation": true,
+                "KeyPolicy": {
+                    "Version": "2012-10-17",
+                    "Id": "S3-Key",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": [
+                                    {
+                                        "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:root"
+                                    }
+                                ]
+                            },
+                            "Action": "kms:*",
+                            "Resource": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "S3KMSKeyAlias": {
+            "Type": "AWS::KMS::Alias",
+            "Properties": {
+                "AliasName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "alias/genai-s3kms",
+                            {
+                                "Fn::Select": [
+                                    3,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                },
+                "TargetKeyId": {
+                    "Ref": "S3KMSKey"
+                }
+            }
+        },
+        "LoggingBucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "BucketEncryption": {
+                    "ServerSideEncryptionConfiguration": [
+                        {
+                            "ServerSideEncryptionByDefault": {
+                                "KMSMasterKeyID": {
+                                    "Fn::Sub": "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:${S3KMSKeyAlias}"
+                                },
+                                "SSEAlgorithm": "aws:kms"
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "S3BucketPolicy": {
+            "Type": "AWS::S3::BucketPolicy",
+            "Properties": {
+                "Bucket": {
+                    "Ref": "LoggingBucket"
+                },
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Action": [
+                                "s3:PutObject"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "logging.s3.amazonaws.com"
+                            },
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${LoggingBucket}/*"
+                                }
+                            ],
+                            "Condition": {
+                                "StringEquals": {
+                                    "aws:SourceAccount": {
+                                        "Fn::Sub": "${AWS::AccountId}"
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            "Action": "s3:*",
+                            "Effect": "Deny",
+                            "Principal": "*",
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${LoggingBucket}"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${LoggingBucket}/*"
+                                }
+                            ],
+                            "Condition": {
+                                "Bool": {
+                                    "aws:SecureTransport": "false"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "GenAILambdaArtifactsS3Bucket": {
+            "Type": "AWS::S3::Bucket",
+            "DeletionPolicy": "Retain",
+            "UpdateReplacePolicy": "Retain",
+            "Properties": {
+                "LoggingConfiguration": {
+                    "DestinationBucketName": {
+                        "Ref": "LoggingBucket"
+                    },
+                    "LogFilePrefix": "genailambdaartifactss3bucket-logs/"
+                },
+                "BucketEncryption": {
+                    "ServerSideEncryptionConfiguration": [
+                        {
+                            "ServerSideEncryptionByDefault": {
+                                "KMSMasterKeyID": {
+                                    "Fn::Sub": "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:${S3KMSKeyAlias}"
+                                },
+                                "SSEAlgorithm": "aws:kms"
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "LambdaS3BucketPolicy": {
+            "Type": "AWS::S3::BucketPolicy",
+            "Properties": {
+                "Bucket": {
+                    "Ref": "GenAILambdaArtifactsS3Bucket"
+                },
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Action": "s3:*",
+                            "Effect": "Deny",
+                            "Principal": "*",
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${GenAILambdaArtifactsS3Bucket}"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${GenAILambdaArtifactsS3Bucket}/*"
+                                }
+                            ],
+                            "Condition": {
+                                "Bool": {
+                                    "aws:SecureTransport": "false"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "GenAISearchInterpreterS3Bucket": {
+            "Type": "AWS::S3::Bucket",
+            "DeletionPolicy": "Retain",
+            "UpdateReplacePolicy": "Retain",
+            "Properties": {
+                "LoggingConfiguration": {
+                    "DestinationBucketName": {
+                        "Ref": "LoggingBucket"
+                    },
+                    "LogFilePrefix": "genaisearchinterpreters3bucket-logs/"
+                },
+                "BucketEncryption": {
+                    "ServerSideEncryptionConfiguration": [
+                        {
+                            "ServerSideEncryptionByDefault": {
+                                "KMSMasterKeyID": {
+                                    "Fn::Sub": "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:${S3KMSKeyAlias}"
+                                },
+                                "SSEAlgorithm": "aws:kms"
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "SearchInterpreterS3BucketPolicy": {
+            "Type": "AWS::S3::BucketPolicy",
+            "Properties": {
+                "Bucket": {
+                    "Ref": "GenAISearchInterpreterS3Bucket"
+                },
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Action": "s3:*",
+                            "Effect": "Deny",
+                            "Principal": "*",
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${GenAISearchInterpreterS3Bucket}"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${GenAISearchInterpreterS3Bucket}/*"
+                                }
+                            ],
+                            "Condition": {
+                                "Bool": {
+                                    "aws:SecureTransport": "false"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "GenAITestS3Bucket": {
+            "Type": "AWS::S3::Bucket",
+            "DeletionPolicy": "Retain",
+            "UpdateReplacePolicy": "Retain",
+            "Properties": {
+                "LoggingConfiguration": {
+                    "DestinationBucketName": {
+                        "Ref": "LoggingBucket"
+                    },
+                    "LogFilePrefix": "genaitests3bucket-logs/"
+                },
+                "BucketEncryption": {
+                    "ServerSideEncryptionConfiguration": [
+                        {
+                            "ServerSideEncryptionByDefault": {
+                                "KMSMasterKeyID": {
+                                    "Fn::Sub": "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:${S3KMSKeyAlias}"
+                                },
+                                "SSEAlgorithm": "aws:kms"
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "TestS3BucketPolicy": {
+            "Type": "AWS::S3::BucketPolicy",
+            "Properties": {
+                "Bucket": {
+                    "Ref": "GenAITestS3Bucket"
+                },
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Action": "s3:*",
+                            "Effect": "Deny",
+                            "Principal": "*",
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${GenAITestS3Bucket}"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${GenAITestS3Bucket}/*"
+                                }
+                            ],
+                            "Condition": {
+                                "Bool": {
+                                    "aws:SecureTransport": "false"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "GenAIKendraIndex": {
+            "Type": "AWS::Kendra::Index",
+            "Properties": {
+                "Description": "Kendra index for content search",
+                "Edition": {
+                    "Fn::Sub": "${GenAIKendraEdition}"
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "GenAISamplesKendraIndex",
+                            {
+                                "Fn::Select": [
+                                    3,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                },
+                "RoleArn": {
+                    "Fn::GetAtt": [
+                        "GenAISamplesKendraRole",
+                        "Arn"
+                    ]
+                }
+            }
+        },
+        "GenAIKendraDS": {
+            "Type": "AWS::Kendra::DataSource",
+            "Properties": {
+                "DataSourceConfiguration": {
+                    "S3Configuration": {
+                        "BucketName": {
+                            "Ref": "GenAISearchInterpreterS3Bucket"
+                        }
+                    }
+                },
+                "IndexId": {
+                    "Fn::GetAtt": [
+                        "GenAIKendraIndex",
+                        "Id"
+                    ]
+                },
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "GenAIKendraDatasource",
+                            {
+                                "Fn::Select": [
+                                    2,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                },
+                "RoleArn": {
+                    "Fn::GetAtt": [
+                        "GenAISamplesKendraRole",
+                        "Arn"
+                    ]
+                },
+                "Type": "S3"
+            }
+        },
+        "HelperEC2Instance": {
+            "Type": "AWS::EC2::Instance",
+            "CreationPolicy": {
+                "ResourceSignal": {
+                    "Count": 1,
+                    "Timeout": "PT30M"
+                }
+            },
+            "Metadata": {
+                "AWS::CloudFormation::Init": {
+                    "configSets": {
+                        "default": [
+                            "update",
+                            "install",
+                            "configure-and-build"
+                        ]
+                    },
+                    "update": {
+                        "commands": {
+                            "update": {
+                                "command": "sudo yum update -y;"
+                            }
+                        }
+                    },
+                    "install": {
+                        "packages": {
+                            "rpm": {
+                                "https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm": []
+                            },
+                            "yum": {
+                                "amazon-cloudwatch-agent": [],
+                                "git": [],
+                                "unzip": [],
+                                "docker": []
+                            }
+                        }
+                    },
+                    "configure-and-build": {
+                        "commands": {
+                            "0-clone-repo": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "AWS_DEFAULT_REGION=",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "\n",
+                                            "AWS_ACCOUNT_ID=",
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            },
+                                            "\n",
+                                            "GEN_AI_GITHUB_REPO=",
+                                            {
+                                                "Ref": "GenAIPublicGithubRepo"
+                                            },
+                                            "\n",
+                                            "GEN_AI_S3_BUCKET=",
+                                            {
+                                                "Ref": "GenAICodeBootstrapBucketName"
+                                            },
+                                            "\n",
+                                            "GEN_AI_CODE_SAMPLE_ZIP=",
+                                            {
+                                                "Ref": "DemoSquadGenAICodeSampleZip"
+                                            },
+                                            "\n",
+                                            "GEN_AI_LOG_BUCKET=",
+                                            {
+                                                "Ref": "LoggingBucket"
+                                            },
+                                            "\n",
+                                            "GEN_AI_SAMPLES_ARTIFACTS_TARGET_BUCKET=",
+                                            {
+                                                "Ref": "GenAITestS3Bucket"
+                                            },
+                                            "\n",
+                                            "GEN_AI_KENDRA_SAMPLES_TARGET_BUCKET=",
+                                            {
+                                                "Ref": "GenAISearchInterpreterS3Bucket"
+                                            },
+                                            "\n",
+                                            "GEN_AI_S3_BUCKET_CLEANUP_LAMBDA_SAMPLE_ZIP=",
+                                            {
+                                                "Ref": "S3BucketCleanupLambdaS3Key"
+                                            },
+                                            "\n",
+                                            "GEN_AI_SM_DEPLOYER_LAMBDA_SAMPLE_ZIP=",
+                                            {
+                                                "Ref": "SMDeployerLambdaS3Key"
+                                            },
+                                            "\n",
+                                            "GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET=",
+                                            {
+                                                "Ref": "GenAILambdaArtifactsS3Bucket"
+                                            },
+                                            "\n",
+                                            "export DEBUG_LABEL=`date \"+%Y-%m-%d-%H-%M\"` \n\nexport DEBUG_LOG_PATH=\"debuglogs-repos-${DEBUG_LABEL}\" ;\nexport DEBUG_DIR=\"/tmp/${DEBUG_LOG_PATH}\" ;\nmkdir ${DEBUG_DIR};                \n",
+                                            "\nexport DEBUG_LABEL=`date \"+%Y-%m-%d-%H-%M\"` \n\nexport DEBUG_LOG_PATH=\"debuglogs-repos-${DEBUG_LABEL}\" ;\nexport DEBUG_DIR=\"/tmp/${DEBUG_LOG_PATH}\" ;\nmkdir ${DEBUG_DIR};                \n",
+                                            "\nsudo yum install -y gcc openssl-devel bzip2-devel libffi-devel zlib-devel;\ncd /tmp;\nwget https://www.python.org/ftp/python/3.9.6/Python-3.9.6.tgz;\ntar -xvf Python-3.9.6.tgz;\ncd Python-3.9.6;\n./configure --enable-optimizations;\nsudo make altinstall;\npython3.9 --version;\necho \"Installed Python3.9 on EC2\" > ${DEBUG_DIR}/python3.9_installed.txt;\naws s3 cp  ${DEBUG_DIR}/python3.9_installed.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n\ncd /tmp\nwget https://github.com/aws/aws-sam-cli/releases/latest/download/aws-sam-cli-linux-x86_64.zip;\nunzip aws-sam-cli-linux-x86_64.zip -d sam-install;\n./sam-install/install --update; export PATH=/usr/local/bin:$PATH;\necho \"Installed SAM on EC2\" > ${DEBUG_DIR}/sam_installed.txt;\naws s3 cp  ${DEBUG_DIR}/sam_installed.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n\ncurl $GEN_AI_GITHUB_REPO >& /tmp/repo_found_result.txt\nrepo_404=`grep -i \"error: 404\" /tmp/repo_found_result.txt `;\nrepo_not_reachable=`grep -i \"could not resolve\"  /tmp/repo_found_result.txt `;\nrepo_not_found_count=`grep -ci \"not found\"  /tmp/repo_found_result.txt `;\nif [[ \"$repo_not_found_count\" == \"1\" || \"$repo_404\" != \"\" || \"$repo_not_reachable\" != \"\" ]]; then\n  echo \"Error!! Provided Repo: $GEN_AI_GITHUB_REPO neither found nor reachable/resolvable, proceeding with S3 bucket\" >> ${DEBUG_DIR}/repo_reach.txt; \n  aws s3 cp ${DEBUG_DIR}/repo_reach.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n\n\n  cd /home/ec2-user; \n  aws s3 cp \"s3://${GEN_AI_S3_BUCKET}/${GEN_AI_CODE_SAMPLE_ZIP}\" /home/ec2-user/ 2> ${DEBUG_DIR}/s3_copy_codezip.txt;\n  aws s3 cp  ${DEBUG_DIR}/s3_copy_codezip.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n  \n  cd /home/ec2-user; mkdir gen-ai-extract; cd ./gen-ai-extract; unzip /home/ec2-user/${GEN_AI_CODE_SAMPLE_ZIP}  |& tee ${DEBUG_DIR}/zipfilelist.txt;  \n  echo \"Unzipped files list...\" >> ${DEBUG_DIR}/zipfilelist.txt; \n  aws s3 cp ${DEBUG_DIR}/zipfilelist.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n  \n  mkdir /home/ec2-user/tmp-samples-folder;\n  cp -r sample-artifacts/* /home/ec2-user/tmp-samples-folder/;\n  \n  export LAMBDA_SRCS=/home/ec2-user/gen-ai-extract/lambda-srcs;\n\nelse\n  echo \"Provided Repo: $GEN_AI_GITHUB_REPO found reachable/resolvable, proceeding with Git clone\" >> ${DEBUG_DIR}/repo_reach.txt; \n  aws s3 cp ${DEBUG_DIR}/repo_reach.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n  \n  cd /home/ec2-user;\n  \n  git clone $GEN_AI_GITHUB_REPO gen_ai_samples;\n  cd gen_ai_samples;\n  export LAMBDA_SRCS=/home/ec2-user/gen_ai_samples/lambda-srcs;\n  \n  mkdir /home/ec2-user/tmp-samples-folder;\n  cp -r sample-artifacts/* /home/ec2-user/tmp-samples-folder/;\n  \nfi;\n\npushd \"${LAMBDA_SRCS}/sagemaker-deployer-function\";\nsam build; sam package --s3-bucket \"${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" --region $AWS_DEFAULT_REGION > sagemaker-deployer-sam-package-output.txt;\nsagemaker_deployer_artifact=`grep CodeUri sagemaker-deployer-sam-package-output.txt | awk '{print $NF}' `;\naws s3 cp \"${sagemaker_deployer_artifact}\" \"s3://${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}/${GEN_AI_SM_DEPLOYER_LAMBDA_SAMPLE_ZIP}\";\necho \"Built and copied over Sagemaker Deployer lambda zip ${GEN_AI_SM_DEPLOYER_LAMBDA_SAMPLE_ZIP} into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" > ${DEBUG_DIR}/lambda_file_copies.txt;  \npopd;\n\npushd \"${LAMBDA_SRCS}/s3-bucket-cleanup-function\";\nsam build; sam package --s3-bucket \"${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" --region $AWS_DEFAULT_REGION > s3bucketcleanup-sam-package-output.txt;\ns3bucketcleanup_artifact=`grep CodeUri s3bucketcleanup-sam-package-output.txt | awk '{print $NF}' `;\naws s3 cp \"${s3bucketcleanup_artifact}\" \"s3://${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}/${GEN_AI_S3_BUCKET_CLEANUP_LAMBDA_SAMPLE_ZIP}\";\necho \"Built and copied over S3 Bucket Cleanup lambda zip ${GEN_AI_S3_BUCKET_CLEANUP_LAMBDA_SAMPLE_ZIP} into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" >> ${DEBUG_DIR}/lambda_file_copies.txt;  \npopd;\n\necho \"Copied over lambda zips into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" >> ${DEBUG_DIR}/lambda_file_copies.txt;  \naws s3 cp ${DEBUG_DIR}/lambda_file_copies.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\ncd /home/ec2-user;\n\n\npushd  /home/ec2-user/tmp-samples-folder/;\nfor subdir in `ls`; do aws s3 sync $subdir s3://${GEN_AI_SAMPLES_ARTIFACTS_TARGET_BUCKET}/$subdir; \necho \"Done copying contents of $subdir over to s3 sample artifacts bucket: ${GEN_AI_SAMPLES_ARTIFACTS_TARGET_BUCKET}\" >> ${DEBUG_DIR}/s3_copy_samplezip.txt; done;\n\ncd content-analyzer-samples;\nfor searchFile in `ls`; do aws s3 cp $searchFile s3://${GEN_AI_KENDRA_SAMPLES_TARGET_BUCKET}/; \necho \"Done copying $searchFile over to s3 kendra bucket: ${GEN_AI_KENDRA_SAMPLES_TARGET_BUCKET}\" >>  ${DEBUG_DIR}/s3_copy_samplezip.txt; done;\npopd;\naws s3 cp ${DEBUG_DIR}/s3_copy_samplezip.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n                  \n"
+                                        ]
+                                    ]
+                                }
+                            },
+                            "1-create-and-save-container": {
+                                "command": {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "AWS_DEFAULT_REGION=",
+                                            {
+                                                "Ref": "AWS::Region"
+                                            },
+                                            "\n",
+                                            "AWS_ACCOUNT_ID=",
+                                            {
+                                                "Ref": "AWS::AccountId"
+                                            },
+                                            "\n",
+                                            "GEN_AI_S3_BUCKET=",
+                                            {
+                                                "Ref": "GenAICodeBootstrapBucketName"
+                                            },
+                                            "\n",
+                                            "GEN_AI_LOG_BUCKET=",
+                                            {
+                                                "Ref": "LoggingBucket"
+                                            },
+                                            "\n",
+                                            "GEN_AI_SAMPLE_ECR_REPO=",
+                                            {
+                                                "Ref": "GenAISampleECRRepo"
+                                            },
+                                            "\n",
+                                            "GEN_AI_SAMPLE_DOCKER_PREFIX=",
+                                            {
+                                                "Ref": "GenAISampleDockerImagePrefix"
+                                            },
+                                            "\n",
+                                            "STACK_ID=",
+                                            {
+                                                "Ref": "AWS::StackId"
+                                            },
+                                            "\n",
+                                            "GEN_AI_SAMPLE_DOCKER_VERSION=",
+                                            {
+                                                "Ref": "GenAISampleDockerVersion"
+                                            },
+                                            "\n",
+                                            "sudo usermod -a -G docker ec2-user; id ec2-user; newgrp docker; \nsudo systemctl enable docker.service; \nsudo systemctl start docker.service; \nsudo systemctl status docker.service; \n",
+                                            "export DEBUG_LABEL=`date \"+%Y-%m-%d-%H-%M\"` \n\nexport DEBUG_LOG_PATH=\"debuglogs-containers-${DEBUG_LABEL}\" ;\nexport DEBUG_DIR=\"/tmp/${DEBUG_LOG_PATH}\" ;\nmkdir ${DEBUG_DIR};\n\ncd /home/ec2-user; mkdir gen-ai; cd ./gen-ai; unzip /home/ec2-user/*code*.zip  |& tee ${DEBUG_DIR}/zipfilelist.txt;  \necho \"Unzipped files list...\" >> ${DEBUG_DIR}/zipfilelist.txt; \naws s3 cp ${DEBUG_DIR}/zipfilelist.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n\nls -R /home/ec2-user/gen-ai |& tee ${DEBUG_DIR}/list-files-step.txt; \necho \"New files after unzip under gen-ai dir...\" >> ${DEBUG_DIR}/list-files-step.txt;  \naws s3 cp ${DEBUG_DIR}/list-files-step.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n",
+                                            "#export STACK_SUBSET_ID=`echo $STACK_ID | awk -F \"/\"  '{print $NF}'  |  awk -F \"-\" '{print $4}' `; \nexport STACK_SUBSET_ID=`echo $STACK_ID | cut -d '/' -f 3 | cut -d '-' -f 4 `;\nexport GEN_AI_SAMPLE_DOCKER_IMAGE=${GEN_AI_SAMPLE_DOCKER_PREFIX}-${STACK_SUBSET_ID};\ncd /home/ec2-user/gen-ai; docker build -t \"${GEN_AI_SAMPLE_DOCKER_IMAGE}:${GEN_AI_SAMPLE_DOCKER_VERSION}\" -f ./Dockerfile . |& tee ${DEBUG_DIR}/step1.txt ; \necho \"Built docker image... ${GEN_AI_SAMPLE_DOCKER_IMAGE}:${GEN_AI_SAMPLE_DOCKER_VERSION}\" >> ${DEBUG_DIR}/step1.txt ;  \naws s3 cp ${DEBUG_DIR}/step1.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n",
+                                            "registry_status=`aws ecr describe-repositories --repository-names  ${GEN_AI_SAMPLE_ECR_REPO}/${GEN_AI_SAMPLE_DOCKER_IMAGE} --region ${AWS_DEFAULT_REGION} |& tee repo-search1.txt  `; \nif [[ \"$registry_status\" =~ \"does not exist\" ]]; then  \n  aws ecr create-repository --repository-name ${GEN_AI_SAMPLE_ECR_REPO}/${GEN_AI_SAMPLE_DOCKER_IMAGE} --region ${AWS_DEFAULT_REGION} |& tee ${DEBUG_DIR}/step2.txt; \n  echo \"Created docker repo...  ${GEN_AI_SAMPLE_ECR_REPO}/${GEN_AI_SAMPLE_DOCKER_IMAGE} \" >> ${DEBUG_DIR}/step2.txt ; \nelse \n  echo \"Already existing docker repo...  ${GEN_AI_SAMPLE_ECR_REPO}/${GEN_AI_SAMPLE_DOCKER_IMAGE} \" >> ${DEBUG_DIR}/step2.txt ; \nfi ; \naws ecr describe-repositories --repository-names  ${GEN_AI_SAMPLE_ECR_REPO}/${GEN_AI_SAMPLE_DOCKER_IMAGE} --region ${AWS_DEFAULT_REGION} |& tee ${DEBUG_DIR}/repo-search2.txt; \n\naws s3 cp ${DEBUG_DIR}/repo-search1.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\";\naws s3 cp ${DEBUG_DIR}/repo-search2.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\";\naws s3 cp ${DEBUG_DIR}/step2.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;  \n\ndocker tag ${GEN_AI_SAMPLE_DOCKER_IMAGE}:${GEN_AI_SAMPLE_DOCKER_VERSION}  ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${GEN_AI_SAMPLE_ECR_REPO}/${GEN_AI_SAMPLE_DOCKER_IMAGE}:${GEN_AI_SAMPLE_DOCKER_VERSION} |& tee ${DEBUG_DIR}/step3.txt ;\necho \"Tagged docker image... ${GEN_AI_SAMPLE_DOCKER_IMAGE}:${GEN_AI_SAMPLE_DOCKER_VERSION} to  ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${GEN_AI_SAMPLE_ECR_REPO}/${GEN_AI_SAMPLE_DOCKER_IMAGE}:${GEN_AI_SAMPLE_DOCKER_VERSION} \" >> ${DEBUG_DIR}/step3.txt ;  \naws s3 cp ${DEBUG_DIR}/step3.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n\naws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${GEN_AI_SAMPLE_ECR_REPO}/${GEN_AI_SAMPLE_DOCKER_IMAGE} |& tee ${DEBUG_DIR}/step4.txt;\necho \"Logged into ecr for ... ${GEN_AI_SAMPLE_DOCKER_IMAGE}:${GEN_AI_SAMPLE_DOCKER_VERSION}\" >> ${DEBUG_DIR}/step4.txt ;  \naws s3 cp ${DEBUG_DIR}/step4.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\";\n\ndocker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${GEN_AI_SAMPLE_ECR_REPO}/${GEN_AI_SAMPLE_DOCKER_IMAGE}:${GEN_AI_SAMPLE_DOCKER_VERSION} |& tee step5.txt; \necho \"Pushed docker image... ${GEN_AI_SAMPLE_DOCKER_IMAGE}:${GEN_AI_SAMPLE_DOCKER_VERSION}\" >> ${DEBUG_DIR}/step5.txt ;  \n\naws s3 cp ${DEBUG_DIR}/step5.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\nsudo aws s3 cp /var/log/cfn-init.log \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\nsudo aws s3 cp /var/log/cloud-init-output.log \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\necho \"Completed with Docker image creation and S3 bucket copying\";\n"
+                                        ]
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "Properties": {
+                "InstanceType": "t3.small",
+                "ImageId": {
+                    "Ref": "LatestAmiId"
+                },
+                "SubnetId": {
+                    "Ref": "GenAISamplesSubnet1"
+                },
+                "SecurityGroupIds": [
+                    {
+                        "Ref": "EC2SecurityGroup"
+                    }
+                ],
+                "IamInstanceProfile": {
+                    "Ref": "GenAISamplesBuilderEC2InstanceProfile"
+                },
+                "UserData": {
+                    "Fn::Base64": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                "#!/bin/bash\n",
+                                "sudo yum install -y aws-cfn-bootstrap\n",
+                                "/opt/aws/bin/cfn-init -v ",
+                                "         --stack ",
+                                {
+                                    "Ref": "AWS::StackName"
+                                },
+                                "         --resource HelperEC2Instance ",
+                                "         --region ",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "         --configsets default",
+                                "\n",
+                                "/opt/aws/bin/cfn-signal -e $?",
+                                " --stack ",
+                                {
+                                    "Ref": "AWS::StackName"
+                                },
+                                " --resource HelperEC2Instance",
+                                " --region ",
+                                {
+                                    "Ref": "AWS::Region"
+                                },
+                                "\n"
+                            ]
+                        ]
+                    }
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "GenAISamplesEC2"
+                    }
+                ]
+            }
+        },
+        "LogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "LogGroupName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "GenAISample",
+                            {
+                                "Fn::Select": [
+                                    3,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                },
+                "RetentionInDays": 7
+            }
+        },
+        "GenAISamplesECSTaskExecutionRolePolicy": {
+            "Type": "AWS::IAM::ManagedPolicy",
+            "Properties": {
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "ecr:GetAuthorizationToken",
+                                "ecr:BatchCheckLayerAvailability",
+                                "ecr:GetDownloadUrlForLayer",
+                                "ecr:BatchGetImage"
+                            ],
+                            "Resource": [
+                                "*"
+                            ]
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "logs:CreateLogGroup",
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents",
+                                "ssm:GetParameter*",
+                                "ssm:PutParameter*",
+                                "ssm:DeleteParameter*",
+                                "secretsmanager:GetSecretValue",
+                                "kms:Decrypt",
+                                "sagemaker:Add*",
+                                "sagemaker:Create*",
+                                "sagemaker:Describe*",
+                                "sagemaker:Delete*",
+                                "sagemaker:Get*",
+                                "sagemaker:Invoke*",
+                                "sagemaker:List*",
+                                "sagemaker:Start*",
+                                "sagemaker:Stop*",
+                                "sagemaker:Update*"
+                            ],
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:*"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:*"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:*"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:kms:${AWS::Region}:${AWS::AccountId}:*"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:*"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        "CustomECSFargateTaskExecutionRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ecs-tasks.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "ManagedPolicyArns": [
+                    {
+                        "Ref": "GenAISamplesECSTaskExecutionRolePolicy"
+                    },
+                    {
+                        "Ref": "GenAISamplesS3DatasourcePolicy"
+                    }
+                ]
+            }
+        },
+        "JumpStartModelWaitHandle": {
+            "Condition": "DeployJumpStart",
+            "DependsOn": "SageMakerJumpStartDeployment",
+            "Type": "AWS::CloudFormation::WaitConditionHandle"
+        },
+        "WaitHandle": {
+            "Type": "AWS::CloudFormation::WaitConditionHandle"
+        },
+        "WaitCondition": {
+            "Type": "AWS::CloudFormation::WaitCondition",
+            "Properties": {
+                "Handle": {
+                    "Fn::If": [
+                        "DeployJumpStart",
+                        {
+                            "Ref": "JumpStartModelWaitHandle"
+                        },
+                        {
+                            "Ref": "WaitHandle"
+                        }
+                    ]
+                },
+                "Timeout": "600",
+                "Count": 0
+            }
+        },
+        "GenAISamplesTaskDefinition": {
+            "Type": "AWS::ECS::TaskDefinition",
+            "DependsOn": [
+                "HelperEC2Instance",
+                "WaitCondition",
+                "UserPoolDomain"
+            ],
+            "Properties": {
+                "Family": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "GenAISamplesTask",
+                            {
+                                "Fn::Select": [
+                                    3,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                },
+                "Cpu": {
+                    "Ref": "ContainerCpu"
+                },
+                "Memory": {
+                    "Ref": "ContainerMemory"
+                },
+                "NetworkMode": "awsvpc",
+                "RequiresCompatibilities": [
+                    "FARGATE"
+                ],
+                "ExecutionRoleArn": {
+                    "Fn::GetAtt": [
+                        "CustomECSFargateTaskExecutionRole",
+                        "Arn"
+                    ]
+                },
+                "ContainerDefinitions": [
+                    {
+                        "Name": {
+                            "Fn::Join": [
+                                "-",
+                                [
+                                    "GenAISamples",
+                                    {
+                                        "Fn::Select": [
+                                            3,
+                                            {
+                                                "Fn::Split": [
+                                                    "-",
+                                                    {
+                                                        "Fn::Select": [
+                                                            2,
+                                                            {
+                                                                "Fn::Split": [
+                                                                    "/",
+                                                                    {
+                                                                        "Ref": "AWS::StackId"
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            ]
+                        },
+                        "Cpu": {
+                            "Ref": "ContainerCpu"
+                        },
+                        "Memory": {
+                            "Ref": "ContainerMemory"
+                        },
+                        "Image": {
+                            "Fn::Join": [
+                                ":",
+                                [
+                                    {
+                                        "Fn::Join": [
+                                            "/",
+                                            [
+                                                {
+                                                    "Fn::Sub": "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com"
+                                                },
+                                                {
+                                                    "Ref": "GenAISampleECRRepo"
+                                                },
+                                                {
+                                                    "Fn::Join": [
+                                                        "-",
+                                                        [
+                                                            {
+                                                                "Ref": "GenAISampleDockerImagePrefix"
+                                                            },
+                                                            {
+                                                                "Fn::Select": [
+                                                                    3,
+                                                                    {
+                                                                        "Fn::Split": [
+                                                                            "-",
+                                                                            {
+                                                                                "Fn::Select": [
+                                                                                    2,
+                                                                                    {
+                                                                                        "Fn::Split": [
+                                                                                            "/",
+                                                                                            {
+                                                                                                "Ref": "AWS::StackId"
+                                                                                            }
+                                                                                        ]
+                                                                                    }
+                                                                                ]
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    ]
+                                                }
+                                            ]
+                                        ]
+                                    },
+                                    {
+                                        "Ref": "GenAISampleDockerVersion"
+                                    }
+                                ]
+                            ]
+                        },
+                        "Secrets": [
+                            {
+                                "Name": "AWS_ACCESS_KEY_ID",
+                                "ValueFrom": {
+                                    "Fn::Sub": "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/${EnvPrefix}/genai/credentials/${GenAIDemoUser1}:ACCESS_KEY::"
+                                }
+                            },
+                            {
+                                "Name": "AWS_SECRET_ACCESS_KEY",
+                                "ValueFrom": {
+                                    "Fn::Sub": "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:/${EnvPrefix}/genai/credentials/${GenAIDemoUser1}:SECRET_KEY::"
+                                }
+                            }
+                        ],
+                        "Environment": [
+                            {
+                                "Name": "STACK_ID",
+                                "Value": {
+                                    "Fn::Select": [
+                                        2,
+                                        {
+                                            "Fn::Split": [
+                                                "/",
+                                                {
+                                                    "Ref": "AWS::StackId"
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "Name": "AWS_DEFAULT_REGION",
+                                "Value": {
+                                    "Ref": "AWS::Region"
+                                }
+                            },
+                            {
+                                "Name": "CONTAINER_PORT",
+                                "Value": {
+                                    "Ref": "ContainerPort"
+                                }
+                            },
+                            {
+                                "Name": "BEDROCK_TITAN_PAYLOAD_LIMIT",
+                                "Value": "20000"
+                            },
+                            {
+                                "Name": "POOL_DOMAIN_NAME",
+                                "Value": {
+                                    "Ref": "CognitoDomain"
+                                }
+                            },
+                            {
+                                "Name": "POOL_ID",
+                                "Value": {
+                                    "Ref": "UserPool"
+                                }
+                            },
+                            {
+                                "Name": "APP_CLIENT_ID",
+                                "Value": {
+                                    "Ref": "UserPoolClient"
+                                }
+                            },
+                            {
+                                "Name": "APP_CLIENT_SECRET",
+                                "Value": {
+                                    "Fn::GetAtt": [
+                                        "UserPoolClient",
+                                        "ClientSecret"
+                                    ]
+                                }
+                            },
+                            {
+                                "Name": "COGNITO_CUSTOM_READ_PROFILE",
+                                "Value": "genai-cog/read"
+                            },
+                            {
+                                "Name": "COGNITO_CUSTOM_WRITE_PROFILE",
+                                "Value": "genai-cog/write"
+                            },
+                            {
+                                "Name": "CF_DISTRIBUTION",
+                                "Value": {
+                                    "Fn::GetAtt": [
+                                        "GenAISamplesCFDistribution",
+                                        "DomainName"
+                                    ]
+                                }
+                            },
+                            {
+                                "Name": "ALLOWED_DOMAINS",
+                                "Value": {
+                                    "Ref": "AllowedDomains"
+                                }
+                            },
+                            {
+                                "Name": "COGNITO_USERPOOL_CUSTOM_ATTRIBUTES_LIST",
+                                "Value": {
+                                    "Fn::Join": [
+                                        ",",
+                                        {
+                                            "Ref": "AdditionalUserAttributesForSignup"
+                                        }
+                                    ]
+                                }
+                            },
+                            {
+                                "Name": "genai_chat_history",
+                                "Value": {
+                                    "Ref": "GenAIChatHistoryDynamoDBTable"
+                                }
+                            },
+                            {
+                                "Name": "genai_selfservice_history",
+                                "Value": {
+                                    "Ref": "GenAISelfServiceHistoryDynamoDBTable"
+                                }
+                            },
+                            {
+                                "Name": "im_endpoint_name",
+                                "Value": {
+                                    "Ref": "StableDiffusionModelEndpointId"
+                                }
+                            },
+                            {
+                                "Name": "tx_endpoint_name",
+                                "Value": {
+                                    "Ref": "JumpStartModelEndpointId"
+                                }
+                            },
+                            {
+                                "Name": "fsi_index_id",
+                                "Value": {
+                                    "Fn::GetAtt": [
+                                        "GenAIKendraIndex",
+                                        "Id"
+                                    ]
+                                }
+                            },
+                            {
+                                "Name": "legal_index_id",
+                                "Value": {
+                                    "Fn::GetAtt": [
+                                        "GenAIKendraIndex",
+                                        "Id"
+                                    ]
+                                }
+                            },
+                            {
+                                "Name": "bucket",
+                                "Value": {
+                                    "Ref": "GenAITestS3Bucket"
+                                }
+                            },
+                            {
+                                "Name": "genai_test_bucket",
+                                "Value": {
+                                    "Ref": "GenAITestS3Bucket"
+                                }
+                            },
+                            {
+                                "Name": "genai_demo_portal_assets",
+                                "Value": {
+                                    "Ref": "GenAISearchInterpreterS3Bucket"
+                                }
+                            },
+                            {
+                                "Name": "IAM_ROLE",
+                                "Value": {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:iam::",
+                                            {
+                                                "Fn::Sub": "${AWS::AccountId}"
+                                            },
+                                            ":role/service-role/",
+                                            {
+                                                "Ref": "GenAISMServiceRole"
+                                            }
+                                        ]
+                                    ]
+                                }
+                            },
+                            {
+                                "Name": "falcon_endpoint_name",
+                                "Value": ""
+                            },
+                            {
+                                "Name": "br_endpoint_name",
+                                "Value": ""
+                            },
+                            {
+                                "Name": "travel_index_id",
+                                "Value": {
+                                    "Fn::GetAtt": [
+                                        "GenAIKendraIndex",
+                                        "Id"
+                                    ]
+                                }
+                            },
+                            {
+                                "Name": "campaign_arn",
+                                "Value": ""
+                            },
+                            {
+                                "Name": "flan_endpoint_name",
+                                "Value": {
+                                    "Ref": "JumpStartModelEndpointId"
+                                }
+                            },
+                            {
+                                "Name": "energy_index_id",
+                                "Value": {
+                                    "Fn::GetAtt": [
+                                        "GenAIKendraIndex",
+                                        "Id"
+                                    ]
+                                }
+                            },
+                            {
+                                "Name": "ls_index_id",
+                                "Value": {
+                                    "Fn::GetAtt": [
+                                        "GenAIKendraIndex",
+                                        "Id"
+                                    ]
+                                }
+                            },
+                            {
+                                "Name": "PREFER_MODEL_FAMILY",
+                                "Value": {
+                                    "Ref": "PreferenceForModelType"
+                                }
+                            },
+                            {
+                                "Name": "CFN_INSTALL",
+                                "Value": true
+                            },
+                            {
+                                "Name": "PREFERRED_JUMPSTART_MODEL_ID",
+                                "Value": {
+                                    "Ref": "JumpStartModelId"
+                                }
+                            },
+                            {
+                                "Name": "PREFERRED_JUMPSTART_MODEL_TYPE",
+                                "Value": {
+                                    "Fn::FindInMap": [
+                                        "ModelId2Type",
+                                        {
+                                            "Ref": "JumpStartModelId"
+                                        },
+                                        "ModelType"
+                                    ]
+                                }
+                            },
+                            {
+                                "Name": "JUMPSTART_MODEL_IDS",
+                                "Value": {
+                                    "Ref": "JumpStartModelId"
+                                }
+                            },
+                            {
+                                "Name": "JUMPSTART_MODEL_ENDPOINT",
+                                "Value": {
+                                    "Ref": "JumpStartModelEndpointId"
+                                }
+                            },
+                            {
+                                "Fn::If": [
+                                    "DeployJumpStart",
+                                    {
+                                        "Name": "JUMPSTART_MODEL_ENDPOINT_ARN",
+                                        "Value": {
+                                            "Fn::GetAtt": [
+                                                "SageMakerJumpStartDeployment",
+                                                "PhysicalResourceId"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "Name": "JUMPSTART_MODEL_ENDPOINT_ARN",
+                                        "Value": "None"
+                                    }
+                                ]
+                            },
+                            {
+                                "Fn::If": [
+                                    "DeployStableDiffusion",
+                                    {
+                                        "Name": "STABLEDIFFUSION_MODEL_ENDPOINT_ARN",
+                                        "Value": {
+                                            "Fn::GetAtt": [
+                                                "StableDiffusionJumpStartDeployment",
+                                                "PhysicalResourceId"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "Name": "STABLEDIFFUSION_MODEL_ENDPOINT_ARN",
+                                        "Value": "None"
+                                    }
+                                ]
+                            },
+                            {
+                                "Name": "falcon_endpoint_name",
+                                "Value": {
+                                    "Ref": "JumpStartModelEndpointId"
+                                }
+                            },
+                            {
+                                "Name": "PREFERRED_BEDROCK_MODEL_TYPE",
+                                "Value": {
+                                    "Ref": "PreferredBedrockModelType"
+                                }
+                            },
+                            {
+                                "Name": "BEDROCK_MODEL_TYPES",
+                                "Value": {
+                                    "Ref": "BedrockModelTypes"
+                                }
+                            },
+                            {
+                                "Name": "BEDROCK_MODEL_IDS",
+                                "Value": {
+                                    "Ref": "BedrockModelIDs"
+                                }
+                            }
+                        ],
+                        "PortMappings": [
+                            {
+                                "ContainerPort": {
+                                    "Ref": "ContainerPort"
+                                }
+                            }
+                        ],
+                        "LogConfiguration": {
+                            "LogDriver": "awslogs",
+                            "Options": {
+                                "awslogs-group": {
+                                    "Ref": "LogGroup"
+                                },
+                                "awslogs-region": {
+                                    "Ref": "AWS::Region"
+                                },
+                                "awslogs-stream-prefix": "gen-ai-sample-ecs-task"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        "GenAISamplesECSCluster": {
+            "Type": "AWS::ECS::Cluster",
+            "Properties": {
+                "ClusterName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "GenAISamplesECSCluster",
+                            {
+                                "Fn::Select": [
+                                    3,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                }
+            }
+        },
+        "ECSService": {
+            "Type": "AWS::ECS::Service",
+            "DependsOn": [
+                "PublicLoadBalancerListenerHTTP"
+            ],
+            "Properties": {
+                "ServiceName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "GenAISamplesECSService",
+                            {
+                                "Fn::Select": [
+                                    3,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                },
+                "Cluster": {
+                    "Ref": "GenAISamplesECSCluster"
+                },
+                "LaunchType": "FARGATE",
+                "DeploymentConfiguration": {
+                    "MaximumPercent": 200,
+                    "MinimumHealthyPercent": 75
+                },
+                "DesiredCount": {
+                    "Ref": "DesiredCount"
+                },
+                "NetworkConfiguration": {
+                    "AwsvpcConfiguration": {
+                        "AssignPublicIp": "ENABLED",
+                        "SecurityGroups": [
+                            {
+                                "Ref": "FargateContainerSecurityGroup"
+                            }
+                        ],
+                        "Subnets": [
+                            {
+                                "Ref": "GenAISamplesSubnet1"
+                            },
+                            {
+                                "Ref": "GenAISamplesSubnet2"
+                            }
+                        ]
+                    }
+                },
+                "TaskDefinition": {
+                    "Ref": "GenAISamplesTaskDefinition"
+                },
+                "LoadBalancers": [
+                    {
+                        "ContainerName": {
+                            "Fn::Join": [
+                                "-",
+                                [
+                                    "GenAISamples",
+                                    {
+                                        "Fn::Select": [
+                                            3,
+                                            {
+                                                "Fn::Split": [
+                                                    "-",
+                                                    {
+                                                        "Fn::Select": [
+                                                            2,
+                                                            {
+                                                                "Fn::Split": [
+                                                                    "/",
+                                                                    {
+                                                                        "Ref": "AWS::StackId"
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            ]
+                        },
+                        "ContainerPort": {
+                            "Ref": "ContainerPort"
+                        },
+                        "TargetGroupArn": {
+                            "Ref": "TargetGroup"
+                        }
+                    }
+                ]
+            }
+        },
+        "GenAINeptuneHandlerLambdaRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "Policies": [
+                    {
+                        "PolicyName": "LambdaRolePolicy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": "logs:CreateLogGroup",
+                                    "Resource": {
+                                        "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+                                    }
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "logs:CreateLogStream",
+                                        "logs:PutLogEvents"
+                                    ],
+                                    "Resource": {
+                                        "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "GenAIChatHistoryDynamoDBTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "UpdateReplacePolicy": "Retain",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+                "TableName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "genai-chat-history",
+                            {
+                                "Fn::Select": [
+                                    3,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                },
+                "BillingMode": "PAY_PER_REQUEST",
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "session_id",
+                        "AttributeType": "S"
+                    }
+                ],
+                "KeySchema": [
+                    {
+                        "AttributeName": "session_id",
+                        "KeyType": "HASH"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "genai-chat-history"
+                    }
+                ]
+            }
+        },
+        "GenAISelfServiceHistoryDynamoDBTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "UpdateReplacePolicy": "Retain",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+                "TableName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "genai-selfservice-history",
+                            {
+                                "Fn::Select": [
+                                    3,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                },
+                "BillingMode": "PAY_PER_REQUEST",
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "session_id",
+                        "AttributeType": "S"
+                    },
+                    {
+                        "AttributeName": "turn",
+                        "AttributeType": "S"
+                    }
+                ],
+                "KeySchema": [
+                    {
+                        "AttributeName": "session_id",
+                        "KeyType": "HASH"
+                    },
+                    {
+                        "AttributeName": "turn",
+                        "KeyType": "RANGE"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "genai-selfservice-history"
+                    }
+                ]
+            }
+        },
+        "GenAIDDBRolePolicy": {
+            "Type": "AWS::IAM::ManagedPolicy",
+            "Properties": {
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "dynamodb:DescribeTable",
+                                "dynamodb:ListTables",
+                                "dynamodb:GetItem",
+                                "dynamodb:DeleteItem",
+                                "dynamodb:PutItem",
+                                "dynamodb:UpdateItem",
+                                "dynamodb:Query",
+                                "dynamodb:Scan"
+                            ],
+                            "Resource": [
+                                {
+                                    "Fn::GetAtt": [
+                                        "GenAIChatHistoryDynamoDBTable",
+                                        "Arn"
+                                    ]
+                                },
+                                {
+                                    "Fn::GetAtt": [
+                                        "GenAISelfServiceHistoryDynamoDBTable",
+                                        "Arn"
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        "TargetGroup": {
+            "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+            "Properties": {
+                "HealthCheckIntervalSeconds": 6,
+                "HealthCheckPath": "/_stcore/health",
+                "Matcher": {
+                    "HttpCode": 200
+                },
+                "HealthCheckProtocol": "HTTP",
+                "HealthCheckTimeoutSeconds": 5,
+                "HealthyThresholdCount": 2,
+                "TargetType": "ip",
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "GenAISamples",
+                            "TargetGroup",
+                            {
+                                "Fn::Select": [
+                                    3,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                },
+                "Port": {
+                    "Ref": "ContainerPort"
+                },
+                "Protocol": "HTTP",
+                "UnhealthyThresholdCount": 2,
+                "TargetGroupAttributes": [
+                    {
+                        "Key": "stickiness.enabled",
+                        "Value": true
+                    },
+                    {
+                        "Key": "deregistration_delay.timeout_seconds",
+                        "Value": 30
+                    }
+                ],
+                "VpcId": {
+                    "Ref": "GenAISamplesVPC"
+                }
+            }
+        },
+        "EcsSecurityGroupIngressFromPublicALB": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Properties": {
+                "Description": "Ingress from the public ALB",
+                "GroupId": {
+                    "Ref": "FargateContainerSecurityGroup"
+                },
+                "IpProtocol": -1,
+                "SourceSecurityGroupId": {
+                    "Ref": "PublicLoadBalancerSG"
+                }
+            }
+        },
+        "EcsSecurityGroupIngressFromSelf": {
+            "Type": "AWS::EC2::SecurityGroupIngress",
+            "Properties": {
+                "Description": "Ingress from other containers in the same security group",
+                "GroupId": {
+                    "Ref": "FargateContainerSecurityGroup"
+                },
+                "IpProtocol": -1,
+                "SourceSecurityGroupId": {
+                    "Ref": "FargateContainerSecurityGroup"
+                }
+            }
+        },
+        "PublicLoadBalancerSG": {
+            "Type": "AWS::EC2::SecurityGroup",
+            "Properties": {
+                "GroupDescription": "Access to the public facing load balancer",
+                "VpcId": {
+                    "Ref": "GenAISamplesVPC"
+                },
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "IpProtocol": "tcp",
+                        "ToPort": 8080,
+                        "FromPort": 8080
+                    }
+                ],
+                "SecurityGroupEgress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "IpProtocol": -1
+                    }
+                ]
+            }
+        },
+        "PublicLoadBalancer": {
+            "DependsOn": "GenAISamplesPublicRoute",
+            "Type": "AWS::ElasticLoadBalancingV2::LoadBalancer",
+            "Properties": {
+                "Scheme": "internet-facing",
+                "LoadBalancerAttributes": [
+                    {
+                        "Key": "idle_timeout.timeout_seconds",
+                        "Value": "30"
+                    },
+                    {
+                        "Key": "routing.http.drop_invalid_header_fields.enabled",
+                        "Value": "true"
+                    }
+                ],
+                "Subnets": [
+                    {
+                        "Ref": "GenAISamplesSubnet1"
+                    },
+                    {
+                        "Ref": "GenAISamplesSubnet2"
+                    }
+                ],
+                "SecurityGroups": [
+                    {
+                        "Fn::GetAtt": [
+                            "PublicLoadBalancerSG",
+                            "GroupId"
+                        ]
+                    }
+                ]
+            }
+        },
+        "PublicLoadBalancerListenerHTTP": {
+            "Type": "AWS::ElasticLoadBalancingV2::Listener",
+            "Properties": {
+                "DefaultActions": [
+                    {
+                        "FixedResponseConfig": {
+                            "ContentType": "text/plain",
+                            "MessageBody": "Unauthorized access!! Access Denied!",
+                            "StatusCode": "401"
+                        },
+                        "Type": "fixed-response"
+                    }
+                ],
+                "LoadBalancerArn": {
+                    "Ref": "PublicLoadBalancer"
+                },
+                "Port": 8080,
+                "Protocol": "HTTP"
+            }
+        },
+        "ListenerRule1": {
+            "Type": "AWS::ElasticLoadBalancingV2::ListenerRule",
+            "Properties": {
+                "Actions": [
+                    {
+                        "Type": "forward",
+                        "TargetGroupArn": {
+                            "Ref": "TargetGroup"
+                        }
+                    }
+                ],
+                "Conditions": [
+                    {
+                        "Field": "http-header",
+                        "HttpHeaderConfig": {
+                            "HttpHeaderName": "X-Custom-Header",
+                            "Values": [
+                                {
+                                    "Fn::Select": [
+                                        2,
+                                        {
+                                            "Fn::Split": [
+                                                "/",
+                                                {
+                                                    "Ref": "AWS::StackId"
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "ListenerArn": {
+                    "Ref": "PublicLoadBalancerListenerHTTP"
+                },
+                "Priority": 1
+            }
+        },
+        "EC2TerminationLambdaRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AWSXrayFullAccess",
+                    "arn:aws:iam::aws:policy/CloudWatchLogsFullAccess",
+                    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+                    "arn:aws:iam::aws:policy/service-role/AWSLambdaRole"
+                ],
+                "Policies": [
+                    {
+                        "PolicyName": "Ec2ShutdownPolicy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "ec2:StopInstances",
+                                        "ec2:TerminateInstances"
+                                    ],
+                                    "Resource": {
+                                        "Fn::Sub": "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "EC2TerminationLambda": {
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Handler": "index.lambda_handler",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "EC2TerminationLambdaRole",
+                        "Arn"
+                    ]
+                },
+                "Description": "Invoke a Lambda function to terminate ec2 instances.",
+                "Runtime": "python3.9",
+                "MemorySize": 128,
+                "Timeout": 900,
+                "Code": {
+                    "ZipFile": "import json\nimport boto3\nfrom pprint import pprint\nimport os\nimport urllib3\n\naws_region = os.environ.get('AWS_REGION')\nec2 = boto3.client('ec2', region_name=aws_region)\n\n\ndef generate_physical_resource_id(event, context):\n    aws_account_id = context.invoked_function_arn.split(\":\")[4]\n\n    props = event['ResourceProperties']\n    instanceid = props['EC2InstanceIds'][0]\n    \n\n    return f'arn:aws:test:{aws_region}:{aws_account_id}:ec2/{instanceid}'\n    \ndef lambda_handler(event, context):\n    #pprint(dict(os.environ), width = 1)\n    print('Incoming event for ec2 shutdown: ',event)\n    instances = event['ResourceProperties']['EC2InstanceIds']\n    ec2.terminate_instances(InstanceIds=instances)\n    print('stopped your instances: ' + str(instances))\n    sendResponse(event, context, 'SUCCESS', 'Termination Complete!!')\n\ndef sendResponse(event, context, responseStatus, responseData):\n\n    responseBody = {\n        'Status': responseStatus,\n        'StackId': event['StackId'],\n        'RequestId': event['RequestId'],\n        'LogicalResourceId': event['LogicalResourceId'],\n        'PhysicalResourceId': generate_physical_resource_id(event, context),\n        'Data': { 'message': responseData }\n    }\n\n    if ('FAILED' == responseStatus):\n        responseBody['Reason'] = responseData\n        del responseBody['Data']\n\n    print(\"RESPONSE BODY:\\n\", responseBody)\n\n    json_response_body = json.dumps(responseBody)\n    print(\"SENDING RESPONSE.. {} to {} \".format(json_response_body, event['ResponseURL']))\n\n    headers = {\n        'content-type' : '',\n        'content-length' : str(len(json_response_body))\n    }\n\n    try:\n        http = urllib3.PoolManager()\n        response = http.request('PUT', event['ResponseURL'], headers=headers, body=json_response_body)\n        print(\"Status code:\", response.status)\n\n    except Exception as e:\n        print(\"send(..) failed executing http.request(..):\", e)\n"
+                }
+            }
+        },
+        "EC2CleanupViaLambda": {
+            "Type": "Custom::LambdaInvoker",
+            "Version": "1.0",
+            "DependsOn": "ECSService",
+            "Properties": {
+                "ServiceToken": {
+                    "Fn::GetAtt": [
+                        "EC2TerminationLambda",
+                        "Arn"
+                    ]
+                },
+                "EC2InstanceIds": [
+                    {
+                        "Ref": "HelperEC2Instance"
+                    }
+                ]
+            }
+        }
+    },
+    "Outputs": {
+        "GenAICodeBootstrapBucket": {
+            "Value": {
+                "Ref": "GenAICodeBootstrapBucketName"
+            },
+            "Description": "S3 Bucket containing the Gen AI code samples and related artifacts for bootstrap, customizing and running the ECS containers for the sample application. This would be used to bootstrap and create the docker image if no public repo hosting the code samples is available/reachable.\n"
+        },
+        "GenAITestS3Bucket": {
+            "Value": {
+                "Ref": "GenAITestS3Bucket"
+            },
+            "Description": "S3 Bucket for storing the various results (image/voice/text) of testing the use cases"
+        },
+        "GenAISearchInterpreterS3Bucket": {
+            "Value": {
+                "Ref": "GenAISearchInterpreterS3Bucket"
+            },
+            "Description": "S3 Bucket containing the example inputs for search interpreter use case. Extract and upload the documents into the same S3 bucket and then sync the preconfigured Kendra index against its S3Datasource (configured to read from this bucket) \n"
+        },
+        "KendraIndex": {
+            "Value": {
+                "Ref": "GenAIKendraIndex"
+            },
+            "Description": "Kendra index for ingesting samples from S3 datasource"
+        },
+        "StableDiffusionEndpoint": {
+            "Description": "Jumpstart StableDiffusion Endpoint",
+            "Value": {
+                "Fn::If": [
+                    "DeployStableDiffusion",
+                    {
+                        "Ref": "StableDiffusionModelEndpointId"
+                    },
+                    "None"
+                ]
+            }
+        },
+        "JumpstartSagemakerEndpoint": {
+            "Description": "Jumpstart Sagemaker Endpoint",
+            "Value": {
+                "Fn::If": [
+                    "DeployJumpStart",
+                    {
+                        "Ref": "JumpStartModelEndpointId"
+                    },
+                    "None"
+                ]
+            }
+        },
+        "VpcId": {
+            "Value": {
+                "Ref": "GenAISamplesVPC"
+            },
+            "Description": "VPC ID for the GenAISamplesVPC"
+        },
+        "ECSCluster": {
+            "Value": {
+                "Ref": "GenAISamplesECSCluster"
+            },
+            "Description": "ECS Cluster name hosting the container running the streamlit application"
+        },
+        "ECSService": {
+            "Value": {
+                "Fn::GetAtt": [
+                    "ECSService",
+                    "Name"
+                ]
+            },
+            "Description": "ECS Service name hosting the container running the streamlit application"
+        },
+        "LBRSecureTokenHeader": {
+            "Value": {
+                "Fn::Select": [
+                    2,
+                    {
+                        "Fn::Split": [
+                            "/",
+                            {
+                                "Ref": "AWS::StackId"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "Description": "Token required for communicating with LoadBalancer directly (with 'X-Custom-Header' )"
+        },
+        "PublicGenAILoadBalancerEndpoint": {
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "http://",
+                        {
+                            "Fn::GetAtt": [
+                                "PublicLoadBalancer",
+                                "DNSName"
+                            ]
+                        },
+                        ":8080"
+                    ]
+                ]
+            },
+            "Description": "Public loadbalancer endpoint"
+        },
+        "FullStackId": {
+            "Value": {
+                "Fn::Sub": "${AWS::StackId}"
+            },
+            "Description": "Stack Id"
+        },
+        "ResourcesSuffixId": {
+            "Value": {
+                "Fn::Select": [
+                    3,
+                    {
+                        "Fn::Split": [
+                            "-",
+                            {
+                                "Fn::Select": [
+                                    2,
+                                    {
+                                        "Fn::Split": [
+                                            "/",
+                                            {
+                                                "Ref": "AWS::StackId"
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            "Description": "Unique identifier associated with resources"
+        },
+        "DockerCreationDebugLogsS3Bucket": {
+            "Description": "S3 bucket where debug logs for docker container creation gets stored (under debuglogs-*)",
+            "Value": {
+                "Ref": "GenAITestS3Bucket"
+            }
+        },
+        "CognitoUserPoolID": {
+            "Value": {
+                "Ref": "UserPool"
+            },
+            "Description": "The UserPool ID"
+        },
+        "CognitoAppClientID": {
+            "Value": {
+                "Ref": "UserPoolClient"
+            },
+            "Description": "The app client"
+        },
+        "HostedUILoginURL": {
+            "Value": {
+                "Fn::Sub": "https://${CognitoDomain}.auth.${AWS::Region}.amazoncognito.com/login?client_id=${UserPoolClient}&response_type=code&scope=email+openid+phone+profile&redirect_uri=https://${GenAISamplesCFDistribution.DomainName}"
+            },
+            "Description": "The Cognito Hosted UI URL"
+        },
+        "PublicGenAILoadBalancerDNS": {
+            "Value": {
+                "Fn::GetAtt": [
+                    "PublicLoadBalancer",
+                    "DNSName"
+                ]
+            },
+            "Description": "Public loadbalancer DNS"
+        },
+        "PublicSecureCFDistribution": {
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        "https://",
+                        {
+                            "Fn::GetAtt": [
+                                "GenAISamplesCFDistribution",
+                                "DomainName"
+                            ]
+                        }
+                    ]
+                ]
+            },
+            "Description": "Public CloudFront distribution endpoint"
+        }
+    }
+}

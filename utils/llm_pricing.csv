@@ -1,0 +1,24 @@
+model_id,region,input_token_price,output_token_price
+ai21.j2-mid, all, 0.0125, 0.0125
+ai21.j2-ultra, all, 0.0188, 0.0188
+amazon.titan-text-lite,us, 0.0003, 0.0004
+amazon.titan-text-express, us, 0.0008, 0.0016
+amazon.titan-embedding-text, us, 0.0001
+amazon.titan-text-express, ap, 0.0011, 0.0022
+amazon.titan-embedding-text, ap, 0.0002
+amazon.titan-text-express, eu, 0.0012, 0.0023
+amazon.titan-embedding-text, eu, 0.0002
+amazon.titan-text-express, us-gov, 0.0008, 0.0016
+anthropic.claude-v3-haiku,us, 0.00025, 0.00125
+anthropic.claude-v3-sonnet,us, 0.003, 0.015
+anthropic.claude-v2,all,0.008,0.024
+anthropic.claude-instant-v1,all,0.008,0.0024
+#anthropic.claude-v2,ap,0.008,0.024
+#anthropic.claude-instant-v1,ap,0.008,0.0024
+meta.llama2-13b-chat-v1,all, 0.00075,0.001
+meta.llama2-70b-chat-v1,all, 0.00195,0.00256
+mistral.mistral-7b-instruct,all, 0.00015,0.0002
+mistral.mistral-8x7b-instruct,all, 0.00045,0.0007
+
+
+

@@ -1,0 +1,122 @@
+{
+  "metadata": {
+    "schemaVersion": "1.0",
+    "importType": "LEX",
+    "importFormat": "JSON"
+  },
+  "resource": {
+    "name": "InvoiceBot",
+    "version": "3",
+    "intents": [
+      {
+        "name": "GetInvoiceNotes",
+        "version": "2",
+        "fulfillmentActivity": {
+          "type": "ReturnIntent"
+        },
+        "sampleUtterances": [
+          "I would like the invoice notes please",
+          "invoice notes please",
+          "Can you show the invoice notes for {invoicenr}",
+          "I would like the invoice notes for {invoicenr}",
+          "Please show me the invoice notes for {invoicenr}",
+          "show me the invoice notes",
+          "I would like to see the invoice notes"
+        ],
+        "slots": [
+          {
+            "sampleUtterances": [],
+            "slotType": "AMAZON.TVEpisode",
+            "obfuscationSetting": "NONE",
+            "slotConstraint": "Required",
+            "valueElicitationPrompt": {
+              "messages": [
+                {
+                  "contentType": "PlainText",
+                  "content": "Please enter the invoice number"
+                }
+              ],
+              "maxAttempts": 2
+            },
+            "priority": 1,
+            "name": "invoicenr"
+          }
+        ]
+      },
+      {
+        "name": "GetInvoiceSummary",
+        "version": "2",
+        "fulfillmentActivity": {
+          "type": "ReturnIntent"
+        },
+        "sampleUtterances": [
+          "Show me my invoice summary",
+          "invoice summary please",
+          "invoice summary",
+          "summary",
+          "Can you please get me the invoice summary",
+          "I would like to review the invoice summary",
+          "show me the invoice summary"
+        ],
+        "slots": []
+      },
+      {
+        "name": "GetInvoiceDetails",
+        "version": "2",
+        "fulfillmentActivity": {
+          "type": "ReturnIntent"
+        },
+        "sampleUtterances": [
+          "Could you show the invoice details for {invoicenr}",
+          "show me the invoice details for {invoicenr}",
+          "invoice details please",
+          "invoice details",
+          "show me the invoice details",
+          "Get me the invoice details for {invoicenr}",
+          "Get me the invoice details"
+        ],
+        "slots": [
+          {
+            "sampleUtterances": [],
+            "slotType": "AMAZON.TVEpisode",
+            "obfuscationSetting": "NONE",
+            "slotConstraint": "Required",
+            "valueElicitationPrompt": {
+              "messages": [
+                {
+                  "contentType": "PlainText",
+                  "content": "Please enter the invoice number"
+                }
+              ],
+              "maxAttempts": 2
+            },
+            "priority": 1,
+            "name": "invoicenr"
+          }
+        ]
+      }
+    ],
+    "voiceId": "Joanna",
+    "childDirected": false,
+    "locale": "en-US",
+    "idleSessionTTLInSeconds": 300,
+    "clarificationPrompt": {
+      "messages": [
+        {
+          "contentType": "PlainText",
+          "content": "Sorry, can you please repeat that?"
+        }
+      ],
+      "maxAttempts": 5
+    },
+    "abortStatement": {
+      "messages": [
+        {
+          "contentType": "PlainText",
+          "content": "Sorry I didn't understand that request, please try again"
+        }
+      ]
+    },
+    "detectSentiment": false
+  }
+}
