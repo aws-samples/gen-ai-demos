@@ -23,7 +23,7 @@ Note: CICD setup is not included in this template.
 
 Refer to the following for:
 * [Deployment](./docs/install.md)
-* [Accessing App](./docs/testing.md)
+* [Accessing App](./docs/access.md)
 
 ### Customizing the samples
 If user is interested in modifying the samples or adding more customized usecases, this would require recreation of the Docker image of the streamlit app and uptaking it in ECS. There are two scripts available to recreate the ECS Docker image and push ECS to uptake the changed docker image. Edit the following scripts with correct region, stack id and run with AWS creds from command line.
