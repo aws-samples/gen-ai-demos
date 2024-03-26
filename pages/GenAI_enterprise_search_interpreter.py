@@ -286,5 +286,5 @@ if result != '':
         st.sidebar.markdown('### Suggested prompts for further insights \n\n' + 
             p_summary)
     
-st.sidebar.markdown('### :red[Cost of Invocations] \n' 
+st.sidebar.markdown('### :red[Cost of Bedrock Invocations] \n' 
                 + gen_ai_selector.report_cost())

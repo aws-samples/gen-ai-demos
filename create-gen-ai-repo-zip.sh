@@ -5,4 +5,6 @@ zip -r gen-ai-code.zip \
                     Dockerfile \
                     pages \
                     utils \
+                    lambda-srcs \
+                    sample-artifacts \
                     cloudformation 

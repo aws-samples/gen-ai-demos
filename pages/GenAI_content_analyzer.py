@@ -383,5 +383,5 @@ if input_text != '':
         result = result.replace("$","\$")
         st.write(result)              
 
-st.sidebar.markdown('### :red[Cost of Invocations] \n' 
+st.sidebar.markdown('### :red[Cost of Bedrock Invocations] \n' 
                 + gen_ai_selector.report_cost())

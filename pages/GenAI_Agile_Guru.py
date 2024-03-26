@@ -163,5 +163,5 @@ if input_text != '':
             st.write("**BDD Scenarios for your user stories**")
             st.write(bd_answer)
     
-st.sidebar.markdown('### :red[Cost of Invocations] \n' 
+st.sidebar.markdown('### :red[Cost of Bedrock Invocations] \n' 
                 + gen_ai_selector.report_cost()) 

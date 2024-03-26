@@ -383,5 +383,5 @@ if st.session_state.full_transcript:
         #    result = result.replace(pii_value, str('PII - '+pii['Type']))
         #st.write(result)
 
-st.sidebar.markdown('### :red[Cost of Invocations] \n' 
+st.sidebar.markdown('### :red[Cost of Bedrock Invocations] \n' 
                 + gen_ai_selector.report_cost())
