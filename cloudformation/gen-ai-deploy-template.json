@@ -208,7 +208,7 @@
         },
         "GenAIPublicGithubRepo": {
             "Type": "String",
-            "Default": "https://github.com/aws-samples/gen-ai-samples"
+            "Default": "https://github.com/aws-samples/gen-ai-demos"
         },
         "DemoSquadGenAICodeSampleZip": {
             "Type": "String",

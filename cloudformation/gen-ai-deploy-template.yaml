@@ -204,7 +204,7 @@ Parameters:
   GenAIPublicGithubRepo:
     Type: String
     # FIX ME - make sure its pointing to new public repo
-    Default: "https://github.com/aws-samples/gen-ai-samples"
+    Default: "https://github.com/aws-samples/gen-ai-demos"
     
     
   DemoSquadGenAICodeSampleZip:
