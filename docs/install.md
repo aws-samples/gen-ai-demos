@@ -29,7 +29,7 @@ Note: This setup allows Cognito to redirect authenicated user over to CloudFront
 * In order to limit who can access the application, Cognito is configured to allow only specific domains to be accepted. Users who sign up have to match the allowed domains when they register their username and email address. Set the paramter *AllowedDomains* to match the list of allowed domains (can be comma separateed) for users registering. Use the *HostedUILoginURL* (would be in CloudFormation stack outputs tab) to signup for new user or use the app page to sign up as new user. Accessing the CloudFront Distribution endpoint and attempt to login will also show signup link.
 * Cognito user sign up supports additional custom attributes as part of the user registration to identify users by their org/dept/preferences. Edit the parameter and references to it in the template as necessary in order to customize it.
 * Provide a unique value for the *CognitoDomain* (so there is no overlap with any existing Cognito domains as it results in failure). Also, ensure the name does not contain *cognito* and no upper case letters.
-![](./imgs/stack-details.png)
+![](../imgs/stack-details.png)
 * The **GenAIPublicGithubRepo** should point to the Github repository hosting this sample project by default, if not please enter the path of a forked or internally hosted repository in that section.
 
 ![](../imgs/github-repo-config.png)
