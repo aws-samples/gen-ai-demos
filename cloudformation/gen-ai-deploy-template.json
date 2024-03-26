@@ -80,7 +80,7 @@
         },
         "AdditionalUserAttributesForSignup": {
             "Type": "CommaDelimitedList",
-            "Default": "background_color,dept,org",
+            "Default": "dept,org",
             "Description": "Additional Attributes required during user registration with Cognito"
         },
         "AllowedDomains": {
@@ -739,12 +739,6 @@
                     },
                     {
                         "Name": "org",
-                        "AttributeDataType": "String",
-                        "Mutable": true,
-                        "Required": false
-                    },
-                    {
-                        "Name": "background_color",
                         "AttributeDataType": "String",
                         "Mutable": true,
                         "Required": false
