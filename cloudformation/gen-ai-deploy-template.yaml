@@ -71,7 +71,7 @@ Parameters:
     
   AllowedDomains:
     Type: String
-    Default: amazon.com
+    Default: EDIT_ME.com
     Description: Comma separated domain names    
   
     
@@ -1389,7 +1389,7 @@ Resources:
         S3Configuration:
           BucketName: !Ref GenAISearchInterpreterS3Bucket
           #InclusionPrefixes: [ !Sub "${GenAISampleArtifactsS3Partition}" ]
-      IndexId: !GetAtt GenAIKendraIndex.Id
+      IndexId: !Ref GenAIKendraIndex
       Name:  !Join [ '-', [ 'GenAIKendraDatasource',  !Select [2, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ] ]  ] 
       RoleArn: !GetAtt GenAISamplesKendraRole.Arn
       Type: S3
@@ -1514,6 +1514,9 @@ Resources:
                         echo "Unzipped files list..." >> ${DEBUG_DIR}/zipfilelist.txt; 
                         aws s3 cp ${DEBUG_DIR}/zipfilelist.txt "s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/" ;
                         
+                        # Create a link so code base can be referred the same way for both github and zip file extract.
+                        ln -s /home/ec2-user/gen-ai-extract /home/ec2-user/gen-ai;
+
                         mkdir /home/ec2-user/tmp-samples-folder;
                         cp -r sample-artifacts/* /home/ec2-user/tmp-samples-folder/;
                         
@@ -1526,6 +1529,9 @@ Resources:
                         cd /home/ec2-user;
                         
                         git clone $GEN_AI_GITHUB_REPO gen_ai_samples;
+                        # Create a link so code base can be referred the same way for both github and zip file extract.
+                        ln -s /home/ec2-user/gen_ai_samples /home/ec2-user/gen-ai;
+
                         cd gen_ai_samples;
                         export LAMBDA_SRCS=/home/ec2-user/gen_ai_samples/lambda-srcs;
                         
@@ -1604,9 +1610,7 @@ Resources:
                       export DEBUG_DIR="/tmp/${DEBUG_LOG_PATH}" ;
                       mkdir ${DEBUG_DIR};
                       
-                      cd /home/ec2-user; mkdir gen-ai; cd ./gen-ai; unzip /home/ec2-user/*code*.zip  |& tee ${DEBUG_DIR}/zipfilelist.txt;  
-                      echo "Unzipped files list..." >> ${DEBUG_DIR}/zipfilelist.txt; 
-                      aws s3 cp ${DEBUG_DIR}/zipfilelist.txt "s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/" ;
+                      cd /home/ec2-user/gen-ai;
                       
                       ls -R /home/ec2-user/gen-ai |& tee ${DEBUG_DIR}/list-files-step.txt; 
                       echo "New files after unzip under gen-ai dir..." >> ${DEBUG_DIR}/list-files-step.txt;  
