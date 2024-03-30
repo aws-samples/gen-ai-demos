@@ -8,7 +8,7 @@ Note: This setup allows Cognito to redirect authenicated user over to CloudFront
 
 ### Application Stack Deployment
 
-* To get started, download the Cloud Formation template [gen-ai-deploy-template](https://github.com/aws-samples/...gen-ai-deploy-template.yaml) YAML or JSON version from the “cloudformation” directory of the Github repository.<link>
+* To get started, download the Cloud Formation template [gen-ai-deploy-template](../cloudformation/gen-ai-deploy-template.yaml) YAML or JSON version from the [cloudformation](../cloudformation) directory of the Github repository.
 * Log into to your AWS account where you will be deploying this solution. 
 * The recommended region(s) for the first phase of deployment are us-east-1 or us-west-2 as these regions support all the Amazon Bedrock models currently. If you pick any other region, you will only see the available models of that region in the list of models to pick from in the menu on the left panel for each use case. Other dependent services might also not be available.
 
