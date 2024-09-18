@@ -1,1 +1,68 @@
-{"name":"QnA","identifier":"JBK1RIK72Z","description":null,"parentIntentSignature":"AMAZON.QnAIntent","sampleUtterances":null,"intentConfirmationSetting":null,"intentClosingSetting":null,"inputContexts":null,"outputContexts":null,"kendraConfiguration":null,"qnAIntentConfiguration":{"dataSourceConfiguration":{"kendraConfiguration":null,"opensearchConfiguration":null,"bedrockKnowledgeStoreConfiguration":{"exactResponse":false,"bedrockKnowledgeBaseArn":"arn:aws:bedrock:us-west-2:1212121221:knowledge-base/CVFX5GGMFM","bkbExactResponseFields":null}},"bedrockModelConfiguration":{"modelArn":"arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-v2","customPrompt":null,"bedrockGuardrailConfiguration":null,"bedrockTraceStatus":null}},"bedrockAgentIntentConfiguration":null,"dialogCodeHook":null,"fulfillmentCodeHook":{"isActive":true,"postFulfillmentStatusSpecification":{"failureResponse":null,"failureNextStep":{"sessionAttributes":null,"intent":null,"dialogAction":{"type":"EndConversation","slotToElicit":null,"suppressNextMessage":null}},"successResponse":{"messageGroupsList":[{"message":{"ssmlMessage":null,"customPayload":null,"plainTextMessage":{"value":"((x-amz-lex:qnA-search-response))"},"imageResponseCard":null},"variations":null}],"allowInterrupt":true},"successNextStep":{"sessionAttributes":null,"intent":null,"dialogAction":{"type":"ElicitIntent","slotToElicit":null,"suppressNextMessage":null}},"timeoutResponse":null,"timeoutNextStep":{"sessionAttributes":null,"intent":null,"dialogAction":{"type":"EndConversation","slotToElicit":null,"suppressNextMessage":null}}},"fulfillmentUpdatesSpecification":null,"enabled":false},"slotPriorities":[]}
+{
+    "name": "QnA",
+    "identifier": "JBK1RIK72Z",
+    "description": null,
+    "parentIntentSignature": "AMAZON.QnAIntent",
+    "sampleUtterances": null,
+    "intentConfirmationSetting": null,
+    "intentClosingSetting": null,
+    "inputContexts": null,
+    "outputContexts": null,
+    "kendraConfiguration": null,
+    "qnAIntentConfiguration": null,
+    "bedrockAgentIntentConfiguration": null,
+    "dialogCodeHook": null,
+    "fulfillmentCodeHook": {
+        "isActive": true,
+        "postFulfillmentStatusSpecification": {
+            "failureResponse": null,
+            "failureNextStep": {
+                "sessionAttributes": null,
+                "intent": null,
+                "dialogAction": {
+                    "type": "EndConversation",
+                    "slotToElicit": null,
+                    "suppressNextMessage": null
+                }
+            },
+            "successResponse": {
+                "messageGroupsList": [
+                    {
+                        "message": {
+                            "ssmlMessage": null,
+                            "customPayload": null,
+                            "plainTextMessage": {
+                                "value": "((x-amz-lex:qnA-search-response))"
+                            },
+                            "imageResponseCard": null
+                        },
+                        "variations": null
+                    }
+                ],
+                "allowInterrupt": true
+            },
+            "successNextStep": {
+                "sessionAttributes": null,
+                "intent": null,
+                "dialogAction": {
+                    "type": "ElicitIntent",
+                    "slotToElicit": null,
+                    "suppressNextMessage": null
+                }
+            },
+            "timeoutResponse": null,
+            "timeoutNextStep": {
+                "sessionAttributes": null,
+                "intent": null,
+                "dialogAction": {
+                    "type": "EndConversation",
+                    "slotToElicit": null,
+                    "suppressNextMessage": null
+                }
+            }
+        },
+        "fulfillmentUpdatesSpecification": null,
+        "enabled": false
+    },
+    "slotPriorities": []
+}
