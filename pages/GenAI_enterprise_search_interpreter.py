@@ -221,8 +221,11 @@ def GetAnswers(query):
 
     else:
         full_snippet = ''
-
+        print('Full results: {}'.format(results))
+	
         for idx, entry in enumerate(results):
+	    
+            print('Result Entry : {}'.format(entry))
             if idx <= 3:
                 full_snippet += entry['answer'] + '\n'
                 sources += entry['src'] + '\n\n\n'

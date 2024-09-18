@@ -36,6 +36,7 @@ bedrock = autorefresh_session.client('bedrock')
 
 # Get environment variables
 stack_id = os.environ.get('STACK_ID')
+st.set_page_config(page_title="GenAI Chat", page_icon="chat")
 
 # create a unique widget
 if 'key' not in st.session_state:

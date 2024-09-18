@@ -55,13 +55,14 @@ Parameters:
     Default: "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
     Description: Use an AMI of your choosing, we recommend to use the latest available
 
-  CognitoDomain:
-    Type: String
-    MinLength: 3
-    MaxLength: 63
-    AllowedPattern: ^[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?$
-    Description: Enter a string in lowercase. Must be alpha (lowercase) numeric 3-63 in length and should not have 'cognito'.
-    Default: genai-cog
+  # CognitoDomain:
+  #   Type: String
+  #   MinLength: 3
+  #   MaxLength: 63
+  #   AllowedPattern: ^[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?$
+  #   Description: Enter a string in lowercase. Must be alpha (lowercase) numeric 3-63 in length and should not have 'cognito'.
+  #   Default: genai-cog
+  #   #Default: !Join [ '-', [ !Sub 'genai-cog' , !Select [0, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ] ]  ] 
   
   AdditionalUserAttributesForSignup:
     Type: CommaDelimitedList
@@ -196,6 +197,16 @@ Parameters:
     Type: String
     Default: sagemaker-jumpstart-deployer-lambda.zip
 
+  LexFulfillmentLambdaS3Key:
+    Description: The name of the Lex fulfillment Lambda ZIP package (dont change)
+    Type: String
+    Default: lex-fulfillment-lambda.zip
+
+  LexBotRagLambdaS3Key:
+    Description: The name of the LexBot Rag Lambda ZIP package (dont change)
+    Type: String
+    Default: lexbot-rag-lambda.zip
+    
   GenAIKendraEdition:
     Type: String
     Default: DEVELOPER_EDITION
@@ -205,7 +216,19 @@ Parameters:
     Type: String
     # FIX ME - make sure its pointing to new public repo
     Default: "https://github.com/aws-samples/gen-ai-demos"
-    
+
+  LexBotName:
+    Type: String
+    Default: "GenAIHotelBookingLexChatbot"
+    Description: Name of your Lex Bot name
+  LexBotAlias:
+    Type: String
+    Default: "GenAIBotV1" #"beta"
+    Description: Lex Bot Alias
+ 
+  LexGenAIBotSrcZip:
+    Type: String
+    Default: "HotelBot-DRAFT-LexJson.zip"    
     
   DemoSquadGenAICodeSampleZip:
     Type: String
@@ -237,6 +260,7 @@ Conditions:
   DeployStableDiffusion: !And 
     - !Condition EnabledStableDiffusion
     - !Condition DeployJumpStart
+
     
 Resources:
 
@@ -412,8 +436,26 @@ Resources:
                 Condition:
                     StringEquals:
                         "iam:PassedToService": "sagemaker.amazonaws.com"
-
-
+        - PolicyName: DDBPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:DescribeTable
+                  - dynamodb:ListTables
+                  - dynamodb:GetItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                - !GetAtt GenAIChatHistoryDynamoDBTable.Arn
+                - !GetAtt GenAISelfServiceHistoryDynamoDBTable.Arn
+                - !GetAtt GenAIChatStoreDynamoDBTable.Arn
+                - !GetAtt LexHotelReservationsDynamoDBTable.Arn
+                
   S3BucketCleanupLambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -565,7 +607,9 @@ Resources:
       - email
       AliasAttributes: # Added additionally
       - email  
-      UserPoolName: !Sub ${CognitoDomain}-user-pool
+      #UserPoolName: !Sub ${CognitoDomain}-user-pool
+      UserPoolName: !Join [ '-', [ !Sub 'genai-cog' , !Select [0, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ]  , '-user-pool' ]  ] 
+      #UserPoolName: !Join [ '-', [ !Sub '${CognitoDomain}' , !Select [0, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ] , '-user-pool' ]  ] 
       Schema:
         - Name: email
           AttributeDataType: String
@@ -636,7 +680,9 @@ Resources:
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
-      Domain: !Ref CognitoDomain
+      #Domain: !Ref CognitoDomain
+      Domain: !Join [ '-', [ !Sub 'genai-cog' , !Select [0, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ] ]  ] 
+      #Domain: !Join [ '-', [ !Sub '${CognitoDomain}' ,  !Select [0, !Split ['-',  !Select [3, !Split ['/', !Ref AWS::StackId] ]  ] ]  ]  ] 
       UserPoolId: !Ref UserPool
         
         
@@ -809,7 +855,116 @@ Resources:
       Timeout: 900
       
 
-      
+  GenAILexLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole      
+      Policies:
+        - PolicyName: DynamoDB
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:DescribeTable
+                  - dynamodb:ListTables
+                  - dynamodb:GetItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:Query
+                  - dynamodb:Scan                  
+                Resource: 
+                  - !GetAtt LexHotelReservationsDynamoDBTable.Arn
+                  - !GetAtt GenAIChatHistoryDynamoDBTable.Arn
+                  - !GetAtt GenAISelfServiceHistoryDynamoDBTable.Arn
+                  - !GetAtt GenAIChatStoreDynamoDBTable.Arn
+          
+        - PolicyName: SSM
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:                
+                  - "ssm:GetParameter*"
+                  - "ssm:PutParameter*"
+                  - "ssm:DeleteParameter*"
+                  # Secrets Manager
+                  - "secretsmanager:GetSecretValue"
+                Resource: 
+                  - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:*"
+                  - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:*"
+        - PolicyName: Bedrock
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:                
+                  - "bedrock:*"
+                Resource: 
+                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/*"
+                  - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*"
+
+
+        - PolicyName: LexInvoke
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'lex:PostText'
+                Resource: 
+                - !Sub arn:aws:lex:${AWS::Region}:${AWS::AccountId}:*
+                - !Sub arn:aws:lex:${AWS::Region}:${AWS::AccountId}:bot:*
+                
+                
+  LexFulfillmentLambda:
+    Type: AWS::Lambda::Function
+    DependsOn: HelperEC2Instance
+    Properties:
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref LexHotelReservationsDynamoDBTable
+      FunctionName: !Sub ${AWS::StackName}-LexFulfillmentFunction
+      Handler: lex_fulfillment.lambda_handler
+      Role: !GetAtt GenAILexLambdaRole.Arn
+      Runtime: python3.9
+      Timeout: 100
+      Code:
+        S3Bucket: !Ref GenAILambdaArtifactsS3Bucket
+        S3Key: !Ref LexFulfillmentLambdaS3Key
+
+  LexBotRagLambda:
+    Type: AWS::Lambda::Function
+    DependsOn: HelperEC2Instance
+    Properties:
+      Environment:
+        Variables:
+          HOTEL_RESERVATION_TABLE: !Ref LexHotelReservationsDynamoDBTable
+          KNOWLEDGEBASE_ID: 'EDIT_ME'
+          query_slot: 'question'
+          model_id: 'anthropic.claude-v2'
+      FunctionName: !Sub ${AWS::StackName}-LexBotRagFunction
+      Handler: lexbot_rag.lambda_handler
+      Role: !GetAtt GenAILexLambdaRole.Arn
+      Runtime: python3.9
+      Timeout: 100
+      Code:
+        S3Bucket: !Ref GenAILambdaArtifactsS3Bucket
+        S3Key: !Ref LexBotRagLambdaS3Key
+        
   GenAISamplesVPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -1021,35 +1176,7 @@ Resources:
         CidrIp: 0.0.0.0/0
       
 
-  S3Policy:
-    Type: AWS::IAM::Policy
-    Properties:
-      PolicyName: S3Policy
-      PolicyDocument:
-        Statement:
-        - Effect: Allow
-          Action:
-          - s3:GetBucketLocation
-          - s3:GetObject
-          - s3:GetObjectAcl
-          - s3:PutObject
-          - s3:PutObjectAcl
-          - s3:ListBucket*
-          Resource: 
-          - !Join [ '', ["arn:aws:s3:::", !Ref GenAICodeBootstrapBucketName ] ]
-          - !Join [ '', ["arn:aws:s3:::", !Ref GenAICodeBootstrapBucketName, "/*"] ]
-          - !Join [ '', ["arn:aws:s3:::", !Ref GenAILambdaArtifactsS3Bucket ] ]
-          - !Join [ '', ["arn:aws:s3:::", !Ref GenAILambdaArtifactsS3Bucket, "/*"] ]
-          - !Join [ '', ["arn:aws:s3:::", !Ref GenAITestS3Bucket ] ]
-          - !Join [ '', ["arn:aws:s3:::", !Ref GenAITestS3Bucket, "/*"] ]
-          - !Join [ '', ["arn:aws:s3:::", !Ref LoggingBucket ] ]
-          - !Join [ '', ["arn:aws:s3:::", !Ref LoggingBucket, "/*"] ]          
-          - !Join [ '', ["arn:aws:s3:::", !Ref GenAISearchInterpreterS3Bucket ] ]
-          - !Join [ '', ["arn:aws:s3:::", !Ref GenAISearchInterpreterS3Bucket, "/*"] ]
-          
-          
-      Roles:
-      - Ref: S3EC2ImportRole
+
       
   ECRPolicy:
     Type: AWS::IAM::Policy
@@ -1205,7 +1332,7 @@ Resources:
       EnableKeyRotation: true
       KeyPolicy:
         Version: 2012-10-17
-        Id: S3-Key
+        Id: !Join [ '-', [ 'S3-Key',  !Select [3, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ] ]  ] 
         Statement:
           - Effect: Allow
             Principal: 
@@ -1374,25 +1501,25 @@ Resources:
                 "aws:SecureTransport": "false"
       
   
-  GenAIKendraIndex:
-    Type: AWS::Kendra::Index
-    Properties: 
-      Description: Kendra index for content search
-      Edition: !Sub "${GenAIKendraEdition}"
-      Name: !Join [ '-', [ 'GenAISamplesKendraIndex',   !Select [3, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ] ]  ] 
-      RoleArn: !GetAtt GenAISamplesKendraRole.Arn
+#  GenAIKendraIndex:
+#    Type: AWS::Kendra::Index
+#    Properties: 
+#      Description: Kendra index for content search
+#      Edition: !Sub "${GenAIKendraEdition}"
+#      Name: !Join [ '-', [ 'GenAISamplesKendraIndex',   !Select [3, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ] ]  ] 
+#      RoleArn: !GetAtt GenAISamplesKendraRole.Arn
 
-  GenAIKendraDS:
-    Type: AWS::Kendra::DataSource
-    Properties: 
-      DataSourceConfiguration: 
-        S3Configuration:
-          BucketName: !Ref GenAISearchInterpreterS3Bucket
-          #InclusionPrefixes: [ !Sub "${GenAISampleArtifactsS3Partition}" ]
-      IndexId: !Ref GenAIKendraIndex
-      Name:  !Join [ '-', [ 'GenAIKendraDatasource',  !Select [2, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ] ]  ] 
-      RoleArn: !GetAtt GenAISamplesKendraRole.Arn
-      Type: S3
+#  GenAIKendraDS:
+#    Type: AWS::Kendra::DataSource
+#    Properties: 
+#      DataSourceConfiguration: 
+#        S3Configuration:
+#          BucketName: !Ref GenAISearchInterpreterS3Bucket
+#          #InclusionPrefixes: [ !Sub "${GenAISampleArtifactsS3Partition}" ]
+#      IndexId: !Ref GenAIKendraIndex
+#      Name:  !Join [ '-', [ 'GenAIKendraDatasource',  !Select [2, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ] ]  ] 
+#      RoleArn: !GetAtt GenAISamplesKendraRole.Arn
+#      Type: S3
 
       
   HelperEC2Instance:
@@ -1450,6 +1577,18 @@ Resources:
                   - "\n"
                   - GEN_AI_KENDRA_SAMPLES_TARGET_BUCKET=
                   - Ref: GenAISearchInterpreterS3Bucket
+                  - "\n"
+                  - GEN_AI_LEXBOT_TARGET_BUCKET=
+                  - Ref: LexGenAIBotBucket
+                  - "\n"
+                  - GEN_AI_LEXBOT_SAMPLE_ZIP=
+                  - Ref: LexGenAIBotSrcZip
+                  - "\n"                  
+                  - GEN_AI_LEXBOT_LAMBDA_SAMPLE_ZIP=
+                  - Ref: LexFulfillmentLambdaS3Key
+                  - "\n"
+                  - GEN_AI_LEXBOT_RAG_LAMBDA_SAMPLE_ZIP=
+                  - Ref: LexBotRagLambdaS3Key
                   - "\n"
                   
                   # - GEN_AI_NEPTUNE_LAMBDA_SAMPLE_ZIP=
@@ -1521,6 +1660,7 @@ Resources:
                         cp -r sample-artifacts/* /home/ec2-user/tmp-samples-folder/;
                         
                         export LAMBDA_SRCS=/home/ec2-user/gen-ai-extract/lambda-srcs;
+                        export LEX_BOT_SRC=/home/ec2-user/gen-ai-extract/lex-srcs;
    
                       else
                         echo "Provided Repo: $GEN_AI_GITHUB_REPO found reachable/resolvable, proceeding with Git clone" >> ${DEBUG_DIR}/repo_reach.txt; 
@@ -1534,7 +1674,8 @@ Resources:
 
                         cd gen_ai_samples;
                         export LAMBDA_SRCS=/home/ec2-user/gen_ai_samples/lambda-srcs;
-                        
+                        export LEX_BOT_SRC=/home/ec2-user/gen_ai_samples/lex-srcs;
+   
                         mkdir /home/ec2-user/tmp-samples-folder;
                         cp -r sample-artifacts/* /home/ec2-user/tmp-samples-folder/;
                         
@@ -1554,10 +1695,31 @@ Resources:
                       echo "Built and copied over S3 Bucket Cleanup lambda zip ${GEN_AI_S3_BUCKET_CLEANUP_LAMBDA_SAMPLE_ZIP} into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}" >> ${DEBUG_DIR}/lambda_file_copies.txt;  
                       popd;
                       
+                      pushd "${LAMBDA_SRCS}/lex-fulfillment-function";
+                      sam build; sam package --s3-bucket "${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}" --region $AWS_DEFAULT_REGION > lexfulfillment-sam-package-output.txt;
+                      lexfulfillment_artifact=`grep CodeUri lexfulfillment-sam-package-output.txt | awk '{print $NF}' `;
+                      aws s3 cp "${lexfulfillment_artifact}" "s3://${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}/${GEN_AI_LEXBOT_LAMBDA_SAMPLE_ZIP}";
+                      echo "Built and copied over Lex Fulfillment lambda zip ${GEN_AI_LEXBOT_LAMBDA_SAMPLE_ZIP} into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}" >> ${DEBUG_DIR}/lambda_file_copies.txt;  
+                      popd;
+                      
+                      pushd "${LAMBDA_SRCS}/lex-rag-lambda-function";
+                      sam build; sam package --s3-bucket "${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}" --region $AWS_DEFAULT_REGION > lexbot-rag-sam-package-output.txt;
+                      lexbotraglambda_artifact=`grep CodeUri lexbot-rag-sam-package-output.txt | awk '{print $NF}' `;
+                      aws s3 cp "${lexbotraglambda_artifact}" "s3://${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}/${GEN_AI_LEXBOT_RAG_LAMBDA_SAMPLE_ZIP}";
+                      echo "Built and copied over LexBot Rag lambda zip ${GEN_AI_LEXBOT_RAG_LAMBDA_SAMPLE_ZIP} into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}" >> ${DEBUG_DIR}/lambda_file_copies.txt;  
+                      popd;
+                      
+                      
                       echo "Copied over lambda zips into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}" >> ${DEBUG_DIR}/lambda_file_copies.txt;  
                       aws s3 cp ${DEBUG_DIR}/lambda_file_copies.txt "s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/" ;
                       cd /home/ec2-user;
 
+                      pushd "${LEX_BOT_SRC}";
+                      zip -r  /home/ec2-user/${GEN_AI_LEXBOT_SAMPLE_ZIP} .;
+                      aws s3 cp "/home/ec2-user/${GEN_AI_LEXBOT_SAMPLE_ZIP}" "s3://${GEN_AI_LEXBOT_TARGET_BUCKET}";
+                      echo "Built and copied over Lex Bot zip ${GEN_AI_LEXBOT_SAMPLE_ZIP} into the S3 Bucket ${GEN_AI_LEXBOT_TARGET_BUCKET}" > ${DEBUG_DIR}/lex_bot_file_copies.txt;  
+                      popd;
+                      
 
                       pushd  /home/ec2-user/tmp-samples-folder/;
                       for subdir in `ls`; do aws s3 sync $subdir s3://${GEN_AI_SAMPLES_ARTIFACTS_TARGET_BUCKET}/$subdir; 
@@ -1816,7 +1978,9 @@ Resources:
               Value: '20000'
 
             - Name: POOL_DOMAIN_NAME
-              Value: !Ref CognitoDomain
+              #Value: !Ref CognitoDomain
+              Value: !Join [ '-', [ !Sub 'genai-cog' , !Select [0, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ]  ]  ] 
+              #Value: !Join [ '-', [ !Sub '${CognitoDomain}' ,  !Select [0, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ]  ]  ] 
             - Name: POOL_ID
               Value: !Ref UserPool 
             - Name: APP_CLIENT_ID
@@ -1844,15 +2008,17 @@ Resources:
               Value: !Ref GenAIChatHistoryDynamoDBTable
             - Name: genai_selfservice_history
               Value: !Ref GenAISelfServiceHistoryDynamoDBTable
+            - Name: genai_chat_store
+              Value: !Ref GenAIChatStoreDynamoDBTable
             
             - Name: im_endpoint_name
               Value: !Ref StableDiffusionModelEndpointId
             - Name: tx_endpoint_name
               Value: !Ref JumpStartModelEndpointId
             - Name: fsi_index_id
-              Value: !GetAtt GenAIKendraIndex.Id
+              Value: '' #!GetAtt GenAIKendraIndex.Id
             - Name: legal_index_id
-              Value: !GetAtt GenAIKendraIndex.Id
+              Value: '' #!GetAtt GenAIKendraIndex.Id
             # - Name: GEN_AI_NEPTUNE_LAMBDA
             #   Value: !Ref GenAINeptuneHandlerLambda
             - Name: bucket
@@ -1868,15 +2034,15 @@ Resources:
             - Name: br_endpoint_name
               Value: ''
             - Name: travel_index_id
-              Value: !GetAtt GenAIKendraIndex.Id # EDIT ME
+              Value: '' #!GetAtt GenAIKendraIndex.Id # EDIT ME
             - Name: campaign_arn
               Value: ''
             - Name: flan_endpoint_name
               Value: !Ref JumpStartModelEndpointId 
             - Name: energy_index_id
-              Value: !GetAtt GenAIKendraIndex.Id # EDIT ME
+              Value: '' #!GetAtt GenAIKendraIndex.Id # EDIT ME
             - Name: ls_index_id
-              Value:  !GetAtt GenAIKendraIndex.Id # EDIT ME
+              Value:  '' #!GetAtt GenAIKendraIndex.Id # EDIT ME
               
             - Name: PREFER_MODEL_FAMILY
               Value: !Ref PreferenceForModelType
@@ -2054,6 +2220,60 @@ Resources:
         - Key: Name
           Value: genai-selfservice-history
           
+  GenAIChatStoreDynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+    Properties:
+      TableName: !Join [ '-', [ 'genai-chat-store',  !Select [3, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ] ]  ] 
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: session
+          AttributeType: S
+      KeySchema:
+        - AttributeName: session
+          KeyType: HASH
+      Tags:
+        - Key: Name
+          Value: genai-chat-store
+
+  LexHotelReservationsDynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    UpdateReplacePolicy: Retain
+    DeletionPolicy: Retain
+    Properties:
+      TableName: !Join [ '-', [ 'lex-hotel-reservations',  !Select [3, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ] ]  ] 
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: ReservationNr
+          AttributeType: S
+        - AttributeName: City
+          AttributeType: S          
+        # - AttributeName: NumberOfNights
+        #   AttributeType: N  
+        # - AttributeName: NumberOfGuests
+        #   AttributeType: N  
+        # - AttributeName: RoomType
+        #   AttributeType: S  
+        # - AttributeName: CheckInDate
+        #   AttributeType: S
+        # - AttributeName: FirstName
+        #   AttributeType: S
+        # - AttributeName: LastName
+        #   AttributeType: S
+        # - AttributeName: ResStatus
+        #   AttributeType: S
+        # - AttributeName: ResDate
+        #   AttributeType: S          
+      KeySchema:
+        - AttributeName: ReservationNr
+          KeyType: HASH
+        - AttributeName: City
+          KeyType: RANGE
+      Tags:
+        - Key: Name
+          Value: lex-hotel-reservations
+
 
   GenAIDDBRolePolicy:
     Type: AWS::IAM::ManagedPolicy
@@ -2074,6 +2294,8 @@ Resources:
           Resource:
           - !GetAtt GenAIChatHistoryDynamoDBTable.Arn
           - !GetAtt GenAISelfServiceHistoryDynamoDBTable.Arn
+          - !GetAtt GenAIChatStoreDynamoDBTable.Arn
+          - !GetAtt LexHotelReservationsDynamoDBTable.Arn
                 
   #Target group
   TargetGroup:
@@ -2324,7 +2546,163 @@ Resources:
       ServiceToken: !GetAtt EC2TerminationLambda.Arn
       EC2InstanceIds: [ !Ref HelperEC2Instance ]
       
-    
+  # Lex Chat bot related resources
+
+  LexGenAIBotBucket:
+    Type: AWS::S3::Bucket
+   
+  S3BotImportRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      - arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy
+      - arn:aws:iam::aws:policy/AmazonLexFullAccess
+      Path: "/"
+                
+  S3Policy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: S3Policy
+      PolicyDocument:
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:GetBucketLocation
+          - s3:GetObject
+          - s3:GetObjectAcl
+          - s3:PutObject
+          - s3:PutObjectAcl
+          - s3:ListBucket*
+          Resource: 
+          - !Join [ '', ["arn:aws:s3:::", !Ref GenAICodeBootstrapBucketName ] ]
+          - !Join [ '', ["arn:aws:s3:::", !Ref GenAICodeBootstrapBucketName, "/*"] ]
+          - !Join [ '', ["arn:aws:s3:::", !Ref GenAILambdaArtifactsS3Bucket ] ]
+          - !Join [ '', ["arn:aws:s3:::", !Ref GenAILambdaArtifactsS3Bucket, "/*"] ]
+          - !Join [ '', ["arn:aws:s3:::", !Ref GenAITestS3Bucket ] ]
+          - !Join [ '', ["arn:aws:s3:::", !Ref GenAITestS3Bucket, "/*"] ]
+          - !Join [ '', ["arn:aws:s3:::", !Ref LoggingBucket ] ]
+          - !Join [ '', ["arn:aws:s3:::", !Ref LoggingBucket, "/*"] ] 
+          - !Join [ '', ["arn:aws:s3:::", !Ref LexGenAIBotBucket ] ]
+          - !Join [ '', ["arn:aws:s3:::", !Ref LexGenAIBotBucket, "/*"] ] 
+          - !Join [ '', ["arn:aws:s3:::", !Ref GenAISearchInterpreterS3Bucket ] ]
+          - !Join [ '', ["arn:aws:s3:::", !Ref GenAISearchInterpreterS3Bucket, "/*"] ]
+          
+          
+      Roles:
+      - Ref: S3EC2ImportRole
+      - Ref: S3BotImportRole
+      
+
+ 
+  BotRuntimeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lexv2.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonLexFullAccess   
+      Policies:
+        - PolicyName: LexRuntimeRolePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "comprehend:DetectSentiment"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "bedrock:InvokeModel"
+                Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/*"
+              - Effect: Allow
+                Action:
+                  - "bedrock:Retrieve"
+                Resource: !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*"
+
+                 # FIX ME
+               
+ 
+  LexGenAIBot:
+    Type: AWS::Lex::Bot
+    DependsOn: HelperEC2Instance
+    Properties:
+      AutoBuildBotLocales: false
+      BotFileS3Location:
+        S3Bucket: !Ref LexGenAIBotBucket 
+        S3ObjectKey: !Ref LexGenAIBotSrcZip
+      BotLocales:
+        - LocaleId: "en_US"
+          NluConfidenceThreshold: 0.40
+          VoiceSettings:
+            VoiceId: "Ivy"
+      DataPrivacy:
+        ChildDirected: false
+      Description: String
+      IdleSessionTTLInSeconds: 300
+      Name: !Join [ '-', [ !Ref LexBotName,  !Select [3, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ] ]  ] 
+      
+      RoleArn: !GetAtt BotRuntimeRole.Arn
+ 
+  LexGenAIBotVersion:
+    Type: AWS::Lex::BotVersion
+    Properties:
+      BotId: !Ref LexGenAIBot
+      BotVersionLocaleSpecification:
+        - LocaleId: "en_US"
+          BotVersionLocaleDetails:
+            SourceBotVersion: DRAFT
+      Description: LexGenAIBot Version
+ 
+  LexGenAIBotAlias:
+    Type: AWS::Lex::BotAlias
+    DependsOn: LexGenAIBotVersion
+    Properties:
+      BotId: !Ref LexGenAIBot
+      BotAliasName: !Ref LexBotAlias
+      BotVersion: 1
+      SentimentAnalysisSettings:
+        DetectSentiment: true
+      BotAliasLocaleSettings:
+        - BotAliasLocaleSetting:
+            CodeHookSpecification:
+              LambdaCodeHook:
+                CodeHookInterfaceVersion: "1.0"
+                #LambdaArn: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:LexSleepFunction" # FIX ME
+                LambdaArn: !GetAtt LexBotRagLambda.Arn
+            Enabled: true
+          LocaleId: en_US
+         
+  LexBotInvokeLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !GetAtt LexBotRagLambda.Arn
+      Principal: "lexv2.amazonaws.com"
+      SourceArn:
+        !Join
+        - '/'
+        - - !Sub arn:aws:lex:${AWS::Region}:${AWS::AccountId}:bot-alias
+          - !Ref LexGenAIBot
+          - '*'
+     
 Outputs:
 
   GenAICodeBootstrapBucket:
@@ -2343,9 +2721,9 @@ Outputs:
       S3 Bucket containing the example inputs for search interpreter use case.
       Extract and upload the documents into the same S3 bucket and then sync the preconfigured Kendra index against its S3Datasource (configured to read from this bucket) 
 
-  KendraIndex:
-    Value: !Ref GenAIKendraIndex
-    Description: Kendra index for ingesting samples from S3 datasource
+#  KendraIndex:
+#    Value: !Ref GenAIKendraIndex
+#    Description: Kendra index for ingesting samples from S3 datasource
     
   StableDiffusionEndpoint:
     Description: Jumpstart StableDiffusion Endpoint
@@ -2424,9 +2802,10 @@ Outputs:
     Description: The app client
   
   HostedUILoginURL:
-    Value: !Sub https://${CognitoDomain}.auth.${AWS::Region}.amazoncognito.com/login?client_id=${UserPoolClient}&response_type=code&scope=email+openid+phone+profile&redirect_uri=https://${GenAISamplesCFDistribution.DomainName}
+    Value: !Join [ '-', [ !Sub 'genai-cog' , !Select [0, !Split ['-',  !Select [2, !Split ['/', !Ref AWS::StackId] ]  ] ]  , !Sub '.auth.${AWS::Region}.amazoncognito.com/login?client_id=${UserPoolClient}&response_type=code&scope=email+openid+phone+profile&redirect_uri=https://${GenAISamplesCFDistribution.DomainName}' ] ]
+    #Value: !Sub https://${CognitoDomain}.auth.${AWS::Region}.amazoncognito.com/login?client_id=${UserPoolClient}&response_type=code&scope=email+openid+phone+profile&redirect_uri=https://${GenAISamplesCFDistribution.DomainName}
     Description: The Cognito Hosted UI URL    
-  
+    
   PublicGenAILoadBalancerDNS:
     Value: !GetAtt PublicLoadBalancer.DNSName 
     Description: Public loadbalancer DNS

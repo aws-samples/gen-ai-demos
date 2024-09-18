@@ -1,0 +1,33 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  lex-fulfillment-lambda
+
+  Sample SAM Template for lex-fulfillment-lambda
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 128
+
+Resources:
+  LexFulfillmentFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      Handler: lex_fulfillment.lambda_handler
+      Runtime: python3.9
+      Architectures:
+        - x86_64
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  
+  LexFulfillmentFunction:
+    Description: "Lex Fulfillment Lambda Function ARN"
+    Value: !GetAtt LexFulfillmentFunction.Arn
+  LexFulfillmentFunctionIamRole:
+    Description: "Implicit IAM Role created for Lex Fulfillment function"
+    Value: !GetAtt LexFulfillmentFunctionRole.Arn
+

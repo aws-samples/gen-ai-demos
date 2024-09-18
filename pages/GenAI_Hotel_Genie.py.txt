@@ -1,0 +1,340 @@
+import json
+import boto3
+from boto3.dynamodb.conditions import Key, Attr
+import streamlit as st
+import datetime
+from io import BytesIO
+from PIL import Image
+import numpy as np
+import matplotlib.pyplot as plt
+import base64
+import uuid
+import string
+from streamlit_chat import message
+import os
+from utils import gen_ai_selector
+import pages.imports.sts_assume_role as boto3_session
+from streamlit_option_menu import option_menu
+from streamlit_feedback import streamlit_feedback
+
+
+autorefresh_session = boto3_session.run_autorefresh_session()
+STACK_ID= os.getenv('STACK_ID')
+ddb_table = 'genai-chat-store-' + STACK_ID.split('-')[3]
+s3 = autorefresh_session.client('s3')
+comprehend = autorefresh_session.client('comprehend')
+rekognition = autorefresh_session.client('rekognition')
+dynamodb = autorefresh_session.client('dynamodb')
+# Sami changes
+dynamodbres = autorefresh_session.resource('dynamodb')
+table = dynamodbres.Table(ddb_table)
+kendra = autorefresh_session.client("kendra")
+textract = autorefresh_session.client("textract")
+lex = autorefresh_session.client('lexv2-runtime')
+
+st.set_page_config(page_title="Draft Lex Bedrock Test bot", page_icon="hotel")
+
+#languages = ['English', 'Spanish', 'German', 'Portugese', 'Irish', 'Italian', 'Korean', 'French', 'Japanese', 'Mandarin', 'Tamil', 'Hindi', 'Telugu', 'Kannada', 'Arabic', 'Hebrew']
+#languages = ['English', 'Spanish', 'German', 'Portugese', 'Irish', 'Korean', 'Swedish', 'Norwegian', 'Danish', 'Icelandic', 'Finnish', 'Star Trek - Klingon', 'Star Trek - Ferengi', 'Italian', 'French', 'Japanese', 'Mandarin', 'Tamil', 'Hindi', 'Telugu', 'Kannada', 'Arabic', 'Hebrew']
+
+if 'SSsessionID' not in st.session_state:
+    st.session_state['SSsessionID'] = str(uuid.uuid4())
+if 'SScount' not in st.session_state:
+    st.session_state['SScount'] = 0
+if 'SScount_main' not in st.session_state:
+    st.session_state['SScount_main'] = 0
+if 'ss_chat_messages' not in st.session_state:
+    st.session_state.ss_chat_messages = [{}]
+if 'feedback' not in st.session_state:
+    st.session_state.feedback = None
+if 'feedback_reason' not in st.session_state:
+    st.session_state.feedback_reason = " "
+if 'input_text' not in st.session_state:
+    st.session_state.input_text = None
+if 'prev_text' not in st.session_state:
+    st.session_state.prev_text = None
+if 'init_req' not in st.session_state:
+    st.session_state.init_req = None
+if 'result' not in st.session_state:
+    st.session_state.result = None
+if 'choice' not in st.session_state:
+    st.session_state.choice = None
+if 'choice_made' not in st.session_state:
+    st.session_state.choice_made = None
+if 'title' not in st.session_state:
+    st.session_state.title = None
+if 'button_options' not in st.session_state:
+    st.session_state.button_options = ["Please select an option..."]
+if 'button_dict' not in st.session_state:
+    st.session_state.button_dict = {}
+# Sami changes
+if 'new_session' not in st.session_state:
+    st.session_state.new_session = str(uuid.uuid4())
+# End
+if 'genie_intent' not in st.session_state:
+    st.session_state.genie_intent = None
+if 'chat_summary' not in st.session_state:
+    st.session_state.chat_summary = None
+if 'follow_up' not in st.session_state:
+    st.session_state.follow_up = None
+# For new feedback component
+if 'choice_text' not in st.session_state:
+    st.session_state.choice_text = "Please select an option..."
+if 'fbk' not in st.session_state:
+    st.session_state.fbk = str(uuid.uuid4())
+
+
+def get_old_chats():
+    old_messages = []
+    key_name = "session"
+    key_value = str(st.session_state.SSsessionID)
+    
+    response = table.query(
+    KeyConditionExpression=Key(key_name).eq(key_value)
+    )
+    if response:
+        print("DDB response is: " + str(response))
+        for item in response['Items']:
+            message_dict = {}
+            message_dict['session'] = item['session']
+            message_dict['turn'] = item['turn']
+            message_dict['question'] = item['question']
+            message_dict['answer'] = item['answer']
+            old_messages.append(message_dict)
+        print("retrieved old chat messages are: " + str(old_messages))
+        return old_messages
+# End
+
+def store_chat(session, turn, question, answer, feedback, feedback_reason):
+    # We will also store the contents in DDB table for retrieval 
+    if question.lower() != "ask a question":
+        dynamodb.put_item(
+           TableName=ddb_table,
+           Item={
+            'session': {'S': str(session)},
+            'turn': {'S': str(turn)},
+            'question': {'S': str(question)},
+            'answer': {'S': str(answer)},
+            'feedback': {'S': str(feedback)},
+            'feedback_reason': {'S': str(feedback_reason)}
+            }
+        )
+
+
+models = ['Bedrock Titan','Bedrock Claude v2', 'Bedrock Claude v2.1', 'Bedrock Claude Instant v1', 'Bedrock Claude v1', 'Bedrock Llama2 13b chat', 'Bedrock Llama2 70b chat'] #'Bedrock Cohere Text v14']#, 'SageMaker llama2-7b'] #, 'Bedrock Jurassic-2',  'SageMaker Falcon']
+default_model = models.index('Bedrock Claude Instant v1')
+model = st.sidebar.selectbox('Select a FM', models, index=default_model)
+
+
+models = {
+    "bedrock titan" : gen_ai_selector.find_bedrock_model('bedrock titan'),
+    "bedrock claude v2" : gen_ai_selector.find_bedrock_model('bedrock claude-v2'),
+    "bedrock claude v2.1" : gen_ai_selector.find_bedrock_model('bedrock claude-v21'),
+    "bedrock claude instant v1" : gen_ai_selector.find_bedrock_model('bedrock claude-instant-v1'),
+    "bedrock claude v1" : gen_ai_selector.find_bedrock_model('bedrock claude-v1'),
+    "bedrock jurassic-2 ultra v1" : gen_ai_selector.find_bedrock_model('bedrock j2-ultra'),
+    "bedrock jurassic-2 mid v1" : gen_ai_selector.find_bedrock_model('bedrock j2-mid'),
+    "bedrock llama2 13b chat": gen_ai_selector.find_bedrock_model('bedrock llama2 13b chat'),
+    "bedrock llama2 70b chat": gen_ai_selector.find_bedrock_model('bedrock llama2 70b chat'),
+    "bedrock cohere text v14": gen_ai_selector.find_bedrock_model('bedrock cohere text v14')
+    
+}
+
+func = models[model.lower()]['func']
+chunk = models[model.lower()]['char_limits']
+
+p_count = 3
+
+
+st.markdown("# Conversational QnA with Lex and Bedrock Knowledge Base for Hotel")
+
+st.sidebar.header("GenAI Hotel Genie")
+
+st.sidebar.markdown("""
+    - What restaurants are located in FictitiousHotels?
+    - What amenities are provided at FictitiousHotels?
+    - What are the check-in and check-out time at FicititiousHotels?
+    """)
+
+st.write("**Instructions:** \n - Please select an option to get started \n - You will be guided through a series of Q&A steps \n - Click a tab to view the chat window or chat summary :smiley \n")
+
+locale_Id = "en_US"
+bot_id = 'XEDEG8PEOH'
+bot_alias_id = 'TSTALIASID'
+
+answer = ''
+chat_summary = ''
+old_chats = ''
+p_summary = ' '
+
+
+def like_feedback():
+    st.session_state.feedback = "Like"
+    store_chat(st.session_state.SSsessionID, st.session_state.SScount, st.session_state.input_text, st.session_state.result, "Like", " ")
+
+def dislike_feedback():
+    st.session_state.feedback = "Dislike"
+    store_chat(st.session_state.SSsessionID, st.session_state.SScount, st.session_state.input_text, st.session_state.result, "Dislike", st.session_state.feedback_reason)
+    #if dislike_reason := st.text_input("Please provide reason for dislike"):
+    #    st.session_state.feedback_reason = dislike_reason
+
+
+
+
+
+
+def chat_actions():
+    print("inside chat actions")           
+    if st.session_state.prev_text != st.session_state.input_text:
+        print("About to call Lex from inside chat actions with inputs of: " + str(st.session_state.input_text))
+        response = lex.recognize_text(
+            botId=bot_id,
+            botAliasId=bot_alias_id,
+            localeId=locale_Id,
+            sessionId=st.session_state.new_session,
+            text=str(st.session_state.input_text),
+            )
+        print("Lex response after call inside chat actions is: " + str(response))
+
+        if 'content' in response['messages'][0]:
+            result = response['messages'][0]['content']
+            print("Lex response has content and it is: " + result)
+            if result:
+                result = result.replace("$","\$")
+                st.session_state.result = result
+                
+                
+        
+        
+        user_message = st.chat_message("user")
+        user_message.write(st.session_state.input_text)
+        
+        #message(input_text, is_user=True)
+        with st.chat_message("assistant"):
+            st.markdown(st.session_state.result)
+            st.session_state.SScount = int(st.session_state.SScount) + 1
+            store_chat(st.session_state.SSsessionID, st.session_state.SScount, st.session_state.input_text, st.session_state.result, " ", " ")
+            col1,col2,col3,col4 = st.columns([3,3,0.5,0.5])
+            with col3:
+                st.button(":thumbsup:", key=str(uuid.uuid4()), on_click=like_feedback)
+            with col4:
+                st.button(":thumbsdown:", key=str(uuid.uuid4()), on_click=dislike_feedback)
+        st.session_state.prev_text = st.session_state.input_text
+    
+
+
+if not st.session_state.init_req:
+    st.session_state.init_req = "Initialized"
+    print("Sending Hi to Lex in init request")
+    response = lex.recognize_text(
+                    botId=bot_id,
+                    botAliasId=bot_alias_id,
+                    localeId=locale_Id,
+                    sessionId=str(uuid.uuid4()),
+                    text="Hi"
+                )
+                
+    print("Lex response in init request is: " + str(response))
+    if 'messages' in response and response['messages'][0]['contentType'] == 'ImageResponseCard':
+        rcard_result = response['messages'][0]['imageResponseCard']
+        st.session_state.title = rcard_result['title']
+        subtitle = rcard_result['subtitle']
+        for button in rcard_result['buttons']:
+            st.session_state.button_options.append(button['text'])
+            st.session_state.button_dict[button['text']] = button['value']
+
+#print('Choice :' + st.session_state.choice)
+choice_text = option_menu(st.session_state.title,
+    st.session_state.button_options,
+    #icons=['hotel', 'room', 'room', 'room', 'room', 'room'], 
+    icons=['seedling', 'corn', 'corn', 'corn', 'corn', 'corn'], 
+    styles={
+        "container": {"padding": "0!important", "background-color": "#fof8ff", "font-family": "Calibri"},
+        "icon": {"color": "orange", "font-size": "20px"}, 
+        "nav-link": {"font-size": "20px", "text-align": "left", "margin":"0px", "--hover-color": "#f4dcf1"},
+        "nav-link-selected": {"background-color": "green"},
+        }
+    )
+print('Created option menu: '+ choice_text)    
+if choice_text != st.session_state.choice_text:
+    st.session_state.choice_text = choice_text
+
+    if choice_text == "ask a question":
+        st.sidebar.markdown('''
+            ### Hotel knowledge base active \n
+            #### Suggested questions to get started: \n
+            - What restaurants are located in FictitiousHotels? \n
+            - What amenities are provided at FictitiousHotels? \n
+            - What are the check-in and check-out time at FicititiousHotels? \n
+            ''')
+
+
+    print("Choice text is: " + st.session_state.choice_text)
+    st.session_state.choice = st.session_state.button_dict[str(st.session_state.choice_text)]
+
+tab1, tab2, tab3, tab4 = st.tabs(["Current Chat", "Chat History", "Chat Summary", "Follow up actions"])
+
+if st.session_state.choice:
+    st.session_state.choice_made = "yes"
+    print("Inside if condition for session state choice")
+    st.session_state.input_text = str(st.session_state.choice)
+    print("inside Choice if condition checking input text: " + str(st.session_state.input_text))
+    st.session_state.prev_text = " "
+    st.session_state.choice = None
+    st.session_state.new_session = str(uuid.uuid4())
+    st.session_state.choice_text = "Please select an option..."
+    print("***About to call chat actions from Choice If condition***")
+    with tab1:
+        chat_actions()
+
+if st.session_state.choice_made == "yes":
+    input_text = st.chat_input("Type your chat request")
+    if input_text:    
+        st.session_state.input_text = input_text
+        print("Now the user has typed in a chat request and it is: " + str(st.session_state.input_text))
+        st.session_state.prev_text = " "
+        print("About to call chat actions from user typed request with inputs of: " + str(st.session_state.input_text))
+        with tab1:
+            chat_actions()
+    with tab2:
+        old_chats = get_old_chats()
+        print("Inside chat actions old chats retrieved are: " + str(old_chats))
+        if old_chats:
+            for chat in old_chats:
+                if 'question' in chat:
+                    old_user_message = st.chat_message("human")
+                    old_user_message.write(chat['question'])
+                if 'answer' in chat:
+                    old_bot_message = st.chat_message("ai")
+                    old_bot_message.write(chat['answer'])
+    with tab3:
+        old_chats = get_old_chats()
+        if old_chats:
+            print("****getting into tab2 now****")
+            chat_summary = func(None,None,"Summarize the following chat messages in in 200 words: " + str(old_chats) + " If there are no chat messages available, return the response - I do not have enough context to generate a summmary.")
+            st.session_state.chat_summary = chat_summary.replace("$","\$")
+            st.write(st.session_state.chat_summary)    
+    with tab4:
+        old_chats = get_old_chats()
+        if old_chats:
+            print("*****getting into tab3 now*****")
+            follow_up = func(None,None,"Analyze the chat messages " + str(old_chats) + " and generate an email with a list of follow up actions. If there are no chat messages available, return the response - I do not have enough context to generate a follow up email.")
+            st.session_state.follow_up = follow_up.replace("$","\$")
+            st.write(st.session_state.follow_up)
+    if st.session_state.result:
+        if str(st.session_state.input_text).lower() != "ask a question":
+            p_text = func(None,None,'Generate 3 questions that can be asked based on the response from the bot: '+ st.session_state.result)
+            p_text1 = []
+            p_text2 = ''
+            if p_text != '':
+                p_text.replace("$","\$")
+                p_text1 = p_text.split('\n')
+                for i,t in enumerate(p_text1):
+                    if i > 1:
+                        p_text2 += t.split('\n')[0]+'\n\n'
+                    else:
+                        p_text2 += t + '\n\n'                        
+                p_summary = p_text2
+            st.sidebar.markdown('### Generated question suggestions \n\n' + 
+                        p_summary)
+

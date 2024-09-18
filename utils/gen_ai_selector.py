@@ -608,7 +608,7 @@ def call_jumpstart_ai21_j2_model(model_id, model_type, query, max_length=512, to
     return resp
 
 def call_sdxl_model(prompt_text, style_preset='digital-art',height=512, width=512, image_strength=0.5,cfg_scale=10,seed=1885337276,steps=100):
-    model_id = 'stability.stable-diffusion-xl'
+    model_id = 'stability.stable-diffusion-xl-v1'
     model_type = 'sd.sdxl'
     
     logger.info('Call_Model on Jumpstart stable-diffusion...model: {}'.format(model_id))
@@ -1143,7 +1143,7 @@ def call_ai21_model(model_id, model_type, prompt_text,max_tokens, temperature, t
 # "body": "{"text_prompts": [{"text":"this is where you place your input text"}],"cfg_scale":10,"seed":0,"steps":50}"
                                          
 def call_bedrock_sdxl_model(prompt_text, style_preset='digital-art',height=512,width=512,image_strength=0.5,cfg_scale=10,seed=1885337276,steps=100):
-    model_id = 'stability.stable-diffusion-xl'
+    model_id = 'stability.stable-diffusion-xl-v1'
     model_type = 'sd.sdxl'
     
     payload = { "text_prompts": [ 

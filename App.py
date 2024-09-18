@@ -142,6 +142,7 @@ with tab1:
             ### Available demos \n\n
             - **[GenAI Call Analyzer](/GenAI_call_analyzer):** Call transcription, analytics, summarization, auto-prompts and conversational insights using Amazon Transcribe and a LLM \n
             - **[GenAI Content Analyzer](/GenAI_content_analyzer):** Upload images, MS Word, Excel, PPT, PDF, CSV, HTML, or text files, get a summary, auto-prompts and conversational insights using Amazom Rekognition and a LLM \n
+            - **[GenAI Hotel Genie](/GenAI_Hotel_Genie):** Upload images, MS Word, Excel, PPT, PDF, CSV, HTML, or text files, get a summary, auto-prompts and conversational insights using Amazom Rekognition and a LLM \n
         ''')
     elif industry == 'Legal':
         st.markdown('''

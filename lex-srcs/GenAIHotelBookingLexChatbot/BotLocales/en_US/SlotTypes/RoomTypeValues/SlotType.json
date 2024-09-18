@@ -1,0 +1,1 @@
+{"name":"RoomTypeValues","identifier":"SKDRINOLW4","description":null,"slotTypeValues":[{"synonyms":null,"sampleValue":{"value":"king"}},{"synonyms":null,"sampleValue":{"value":"queen"}},{"synonyms":[{"value":"two beds"}],"sampleValue":{"value":"two queen beds"}}],"parentSlotTypeSignature":null,"valueSelectionSetting":{"resolutionStrategy":"TOP_RESOLUTION","regexFilter":null}}

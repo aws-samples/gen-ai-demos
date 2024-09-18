@@ -1,0 +1,10 @@
+version = 0.1
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "lexbot-rag2"
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-1mj37idniykfg"
+s3_prefix = "lexbot-rag2"
+region = "us-west-2"
+capabilities = "CAPABILITY_IAM"
+image_repositories = []

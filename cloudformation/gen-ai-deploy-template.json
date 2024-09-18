@@ -70,14 +70,6 @@
             "Default": "/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2",
             "Description": "Use an AMI of your choosing, we recommend to use the latest available"
         },
-        "CognitoDomain": {
-            "Type": "String",
-            "MinLength": 3,
-            "MaxLength": 63,
-            "AllowedPattern": "^[a-z0-9](?:[a-z0-9\\-]{0,61}[a-z0-9])?$",
-            "Description": "Enter a string in lowercase. Must be alpha (lowercase) numeric 3-63 in length and should not have 'cognito'.",
-            "Default": "genai-cog"
-        },
         "AdditionalUserAttributesForSignup": {
             "Type": "CommaDelimitedList",
             "Default": "dept,org",
@@ -201,6 +193,16 @@
             "Type": "String",
             "Default": "sagemaker-jumpstart-deployer-lambda.zip"
         },
+        "LexFulfillmentLambdaS3Key": {
+            "Description": "The name of the Lex fulfillment Lambda ZIP package (dont change)",
+            "Type": "String",
+            "Default": "lex-fulfillment-lambda.zip"
+        },
+        "LexBotRagLambdaS3Key": {
+            "Description": "The name of the LexBot Rag Lambda ZIP package (dont change)",
+            "Type": "String",
+            "Default": "lexbot-rag-lambda.zip"
+        },
         "GenAIKendraEdition": {
             "Type": "String",
             "Default": "DEVELOPER_EDITION",
@@ -209,6 +211,20 @@
         "GenAIPublicGithubRepo": {
             "Type": "String",
             "Default": "https://github.com/aws-samples/gen-ai-demos"
+        },
+        "LexBotName": {
+            "Type": "String",
+            "Default": "GenAIHotelBookingLexChatbot",
+            "Description": "Name of your Lex Bot name"
+        },
+        "LexBotAlias": {
+            "Type": "String",
+            "Default": "GenAIBotV1",
+            "Description": "Lex Bot Alias"
+        },
+        "LexGenAIBotSrcZip": {
+            "Type": "String",
+            "Default": "HotelBot-DRAFT-LexJson.zip"
         },
         "DemoSquadGenAICodeSampleZip": {
             "Type": "String",
@@ -482,6 +498,53 @@
                                 }
                             ]
                         }
+                    },
+                    {
+                        "PolicyName": "DDBPolicy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "dynamodb:DescribeTable",
+                                        "dynamodb:ListTables",
+                                        "dynamodb:GetItem",
+                                        "dynamodb:DeleteItem",
+                                        "dynamodb:PutItem",
+                                        "dynamodb:UpdateItem",
+                                        "dynamodb:Query",
+                                        "dynamodb:Scan"
+                                    ],
+                                    "Resource": [
+                                        {
+                                            "Fn::GetAtt": [
+                                                "GenAIChatHistoryDynamoDBTable",
+                                                "Arn"
+                                            ]
+                                        },
+                                        {
+                                            "Fn::GetAtt": [
+                                                "GenAISelfServiceHistoryDynamoDBTable",
+                                                "Arn"
+                                            ]
+                                        },
+                                        {
+                                            "Fn::GetAtt": [
+                                                "GenAIChatStoreDynamoDBTable",
+                                                "Arn"
+                                            ]
+                                        },
+                                        {
+                                            "Fn::GetAtt": [
+                                                "LexHotelReservationsDynamoDBTable",
+                                                "Arn"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
                     }
                 ]
             }
@@ -716,7 +779,38 @@
                     "email"
                 ],
                 "UserPoolName": {
-                    "Fn::Sub": "${CognitoDomain}-user-pool"
+                    "Fn::Join": [
+                        "-",
+                        [
+                            {
+                                "Fn::Sub": "genai-cog"
+                            },
+                            {
+                                "Fn::Select": [
+                                    0,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            },
+                            "-user-pool"
+                        ]
+                    ]
                 },
                 "Schema": [
                     {
@@ -828,7 +922,37 @@
             "Type": "AWS::Cognito::UserPoolDomain",
             "Properties": {
                 "Domain": {
-                    "Ref": "CognitoDomain"
+                    "Fn::Join": [
+                        "-",
+                        [
+                            {
+                                "Fn::Sub": "genai-cog"
+                            },
+                            {
+                                "Fn::Select": [
+                                    0,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
                 },
                 "UserPoolId": {
                     "Ref": "UserPool"
@@ -1129,6 +1253,218 @@
                 "Runtime": "python3.9",
                 "MemorySize": 128,
                 "Timeout": 900
+            }
+        },
+        "GenAILexLambdaRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lambda.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+                ],
+                "Policies": [
+                    {
+                        "PolicyName": "DynamoDB",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "dynamodb:DescribeTable",
+                                        "dynamodb:ListTables",
+                                        "dynamodb:GetItem",
+                                        "dynamodb:DeleteItem",
+                                        "dynamodb:PutItem",
+                                        "dynamodb:UpdateItem",
+                                        "dynamodb:Query",
+                                        "dynamodb:Scan"
+                                    ],
+                                    "Resource": [
+                                        {
+                                            "Fn::GetAtt": [
+                                                "LexHotelReservationsDynamoDBTable",
+                                                "Arn"
+                                            ]
+                                        },
+                                        {
+                                            "Fn::GetAtt": [
+                                                "GenAIChatHistoryDynamoDBTable",
+                                                "Arn"
+                                            ]
+                                        },
+                                        {
+                                            "Fn::GetAtt": [
+                                                "GenAISelfServiceHistoryDynamoDBTable",
+                                                "Arn"
+                                            ]
+                                        },
+                                        {
+                                            "Fn::GetAtt": [
+                                                "GenAIChatStoreDynamoDBTable",
+                                                "Arn"
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "PolicyName": "SSM",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "ssm:GetParameter*",
+                                        "ssm:PutParameter*",
+                                        "ssm:DeleteParameter*",
+                                        "secretsmanager:GetSecretValue"
+                                    ],
+                                    "Resource": [
+                                        {
+                                            "Fn::Sub": "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:*"
+                                        },
+                                        {
+                                            "Fn::Sub": "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:*"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "PolicyName": "Bedrock",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "bedrock:*"
+                                    ],
+                                    "Resource": [
+                                        {
+                                            "Fn::Sub": "arn:aws:bedrock:${AWS::Region}::foundation-model/*"
+                                        },
+                                        {
+                                            "Fn::Sub": "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "PolicyName": "LexInvoke",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "lex:PostText"
+                                    ],
+                                    "Resource": [
+                                        {
+                                            "Fn::Sub": "arn:aws:lex:${AWS::Region}:${AWS::AccountId}:*"
+                                        },
+                                        {
+                                            "Fn::Sub": "arn:aws:lex:${AWS::Region}:${AWS::AccountId}:bot:*"
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "LexFulfillmentLambda": {
+            "Type": "AWS::Lambda::Function",
+            "DependsOn": "HelperEC2Instance",
+            "Properties": {
+                "Environment": {
+                    "Variables": {
+                        "TABLE_NAME": {
+                            "Ref": "LexHotelReservationsDynamoDBTable"
+                        }
+                    }
+                },
+                "FunctionName": {
+                    "Fn::Sub": "${AWS::StackName}-LexFulfillmentFunction"
+                },
+                "Handler": "lex_fulfillment.lambda_handler",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "GenAILexLambdaRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "python3.9",
+                "Timeout": 100,
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "GenAILambdaArtifactsS3Bucket"
+                    },
+                    "S3Key": {
+                        "Ref": "LexFulfillmentLambdaS3Key"
+                    }
+                }
+            }
+        },
+        "LexBotRagLambda": {
+            "Type": "AWS::Lambda::Function",
+            "DependsOn": "HelperEC2Instance",
+            "Properties": {
+                "Environment": {
+                    "Variables": {
+                        "HOTEL_RESERVATION_TABLE": {
+                            "Ref": "LexHotelReservationsDynamoDBTable"
+                        },
+                        "KNOWLEDGEBASE_ID": "EDIT_ME",
+                        "query_slot": "question",
+                        "model_id": "anthropic.claude-v2"
+                    }
+                },
+                "FunctionName": {
+                    "Fn::Sub": "${AWS::StackName}-LexBotRagFunction"
+                },
+                "Handler": "lexbot_rag.lambda_handler",
+                "Role": {
+                    "Fn::GetAtt": [
+                        "GenAILexLambdaRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "python3.9",
+                "Timeout": 100,
+                "Code": {
+                    "S3Bucket": {
+                        "Ref": "GenAILambdaArtifactsS3Bucket"
+                    },
+                    "S3Key": {
+                        "Ref": "LexBotRagLambdaS3Key"
+                    }
+                }
             }
         },
         "GenAISamplesVPC": {
@@ -1463,149 +1799,6 @@
                 ]
             }
         },
-        "S3Policy": {
-            "Type": "AWS::IAM::Policy",
-            "Properties": {
-                "PolicyName": "S3Policy",
-                "PolicyDocument": {
-                    "Statement": [
-                        {
-                            "Effect": "Allow",
-                            "Action": [
-                                "s3:GetBucketLocation",
-                                "s3:GetObject",
-                                "s3:GetObjectAcl",
-                                "s3:PutObject",
-                                "s3:PutObjectAcl",
-                                "s3:ListBucket*"
-                            ],
-                            "Resource": [
-                                {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "arn:aws:s3:::",
-                                            {
-                                                "Ref": "GenAICodeBootstrapBucketName"
-                                            }
-                                        ]
-                                    ]
-                                },
-                                {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "arn:aws:s3:::",
-                                            {
-                                                "Ref": "GenAICodeBootstrapBucketName"
-                                            },
-                                            "/*"
-                                        ]
-                                    ]
-                                },
-                                {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "arn:aws:s3:::",
-                                            {
-                                                "Ref": "GenAILambdaArtifactsS3Bucket"
-                                            }
-                                        ]
-                                    ]
-                                },
-                                {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "arn:aws:s3:::",
-                                            {
-                                                "Ref": "GenAILambdaArtifactsS3Bucket"
-                                            },
-                                            "/*"
-                                        ]
-                                    ]
-                                },
-                                {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "arn:aws:s3:::",
-                                            {
-                                                "Ref": "GenAITestS3Bucket"
-                                            }
-                                        ]
-                                    ]
-                                },
-                                {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "arn:aws:s3:::",
-                                            {
-                                                "Ref": "GenAITestS3Bucket"
-                                            },
-                                            "/*"
-                                        ]
-                                    ]
-                                },
-                                {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "arn:aws:s3:::",
-                                            {
-                                                "Ref": "LoggingBucket"
-                                            }
-                                        ]
-                                    ]
-                                },
-                                {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "arn:aws:s3:::",
-                                            {
-                                                "Ref": "LoggingBucket"
-                                            },
-                                            "/*"
-                                        ]
-                                    ]
-                                },
-                                {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "arn:aws:s3:::",
-                                            {
-                                                "Ref": "GenAISearchInterpreterS3Bucket"
-                                            }
-                                        ]
-                                    ]
-                                },
-                                {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "arn:aws:s3:::",
-                                            {
-                                                "Ref": "GenAISearchInterpreterS3Bucket"
-                                            },
-                                            "/*"
-                                        ]
-                                    ]
-                                }
-                            ]
-                        }
-                    ]
-                },
-                "Roles": [
-                    {
-                        "Ref": "S3EC2ImportRole"
-                    }
-                ]
-            }
-        },
         "ECRPolicy": {
             "Type": "AWS::IAM::Policy",
             "Properties": {
@@ -1897,7 +2090,37 @@
                 "EnableKeyRotation": true,
                 "KeyPolicy": {
                     "Version": "2012-10-17",
-                    "Id": "S3-Key",
+                    "Id": {
+                        "Fn::Join": [
+                            "-",
+                            [
+                                "S3-Key",
+                                {
+                                    "Fn::Select": [
+                                        3,
+                                        {
+                                            "Fn::Split": [
+                                                "-",
+                                                {
+                                                    "Fn::Select": [
+                                                        2,
+                                                        {
+                                                            "Fn::Split": [
+                                                                "/",
+                                                                {
+                                                                    "Ref": "AWS::StackId"
+                                                                }
+                                                            ]
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        ]
+                    },
                     "Statement": [
                         {
                             "Effect": "Allow",
@@ -2191,105 +2414,6 @@
                 }
             }
         },
-        "GenAIKendraIndex": {
-            "Type": "AWS::Kendra::Index",
-            "Properties": {
-                "Description": "Kendra index for content search",
-                "Edition": {
-                    "Fn::Sub": "${GenAIKendraEdition}"
-                },
-                "Name": {
-                    "Fn::Join": [
-                        "-",
-                        [
-                            "GenAISamplesKendraIndex",
-                            {
-                                "Fn::Select": [
-                                    3,
-                                    {
-                                        "Fn::Split": [
-                                            "-",
-                                            {
-                                                "Fn::Select": [
-                                                    2,
-                                                    {
-                                                        "Fn::Split": [
-                                                            "/",
-                                                            {
-                                                                "Ref": "AWS::StackId"
-                                                            }
-                                                        ]
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    ]
-                },
-                "RoleArn": {
-                    "Fn::GetAtt": [
-                        "GenAISamplesKendraRole",
-                        "Arn"
-                    ]
-                }
-            }
-        },
-        "GenAIKendraDS": {
-            "Type": "AWS::Kendra::DataSource",
-            "Properties": {
-                "DataSourceConfiguration": {
-                    "S3Configuration": {
-                        "BucketName": {
-                            "Ref": "GenAISearchInterpreterS3Bucket"
-                        }
-                    }
-                },
-                "IndexId": {
-                    "Ref": "GenAIKendraIndex"
-                },
-                "Name": {
-                    "Fn::Join": [
-                        "-",
-                        [
-                            "GenAIKendraDatasource",
-                            {
-                                "Fn::Select": [
-                                    2,
-                                    {
-                                        "Fn::Split": [
-                                            "-",
-                                            {
-                                                "Fn::Select": [
-                                                    2,
-                                                    {
-                                                        "Fn::Split": [
-                                                            "/",
-                                                            {
-                                                                "Ref": "AWS::StackId"
-                                                            }
-                                                        ]
-                                                    }
-                                                ]
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    ]
-                },
-                "RoleArn": {
-                    "Fn::GetAtt": [
-                        "GenAISamplesKendraRole",
-                        "Arn"
-                    ]
-                },
-                "Type": "S3"
-            }
-        },
         "HelperEC2Instance": {
             "Type": "AWS::EC2::Instance",
             "CreationPolicy": {
@@ -2374,6 +2498,26 @@
                                                 "Ref": "GenAISearchInterpreterS3Bucket"
                                             },
                                             "\n",
+                                            "GEN_AI_LEXBOT_TARGET_BUCKET=",
+                                            {
+                                                "Ref": "LexGenAIBotBucket"
+                                            },
+                                            "\n",
+                                            "GEN_AI_LEXBOT_SAMPLE_ZIP=",
+                                            {
+                                                "Ref": "LexGenAIBotSrcZip"
+                                            },
+                                            "\n",
+                                            "GEN_AI_LEXBOT_LAMBDA_SAMPLE_ZIP=",
+                                            {
+                                                "Ref": "LexFulfillmentLambdaS3Key"
+                                            },
+                                            "\n",
+                                            "GEN_AI_LEXBOT_RAG_LAMBDA_SAMPLE_ZIP=",
+                                            {
+                                                "Ref": "LexBotRagLambdaS3Key"
+                                            },
+                                            "\n",
                                             "GEN_AI_S3_BUCKET_CLEANUP_LAMBDA_SAMPLE_ZIP=",
                                             {
                                                 "Ref": "S3BucketCleanupLambdaS3Key"
@@ -2391,7 +2535,7 @@
                                             "\n",
                                             "export DEBUG_LABEL=`date \"+%Y-%m-%d-%H-%M\"` \n\nexport DEBUG_LOG_PATH=\"debuglogs-repos-${DEBUG_LABEL}\" ;\nexport DEBUG_DIR=\"/tmp/${DEBUG_LOG_PATH}\" ;\nmkdir ${DEBUG_DIR};                \n",
                                             "\nexport DEBUG_LABEL=`date \"+%Y-%m-%d-%H-%M\"` \n\nexport DEBUG_LOG_PATH=\"debuglogs-repos-${DEBUG_LABEL}\" ;\nexport DEBUG_DIR=\"/tmp/${DEBUG_LOG_PATH}\" ;\nmkdir ${DEBUG_DIR};                \n",
-                                            "\nsudo yum install -y gcc openssl-devel bzip2-devel libffi-devel zlib-devel;\ncd /tmp;\nwget https://www.python.org/ftp/python/3.9.6/Python-3.9.6.tgz;\ntar -xvf Python-3.9.6.tgz;\ncd Python-3.9.6;\n./configure --enable-optimizations;\nsudo make altinstall;\npython3.9 --version;\necho \"Installed Python3.9 on EC2\" > ${DEBUG_DIR}/python3.9_installed.txt;\naws s3 cp  ${DEBUG_DIR}/python3.9_installed.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n\ncd /tmp\nwget https://github.com/aws/aws-sam-cli/releases/latest/download/aws-sam-cli-linux-x86_64.zip;\nunzip aws-sam-cli-linux-x86_64.zip -d sam-install;\n./sam-install/install --update; export PATH=/usr/local/bin:$PATH;\necho \"Installed SAM on EC2\" > ${DEBUG_DIR}/sam_installed.txt;\naws s3 cp  ${DEBUG_DIR}/sam_installed.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n\ncurl $GEN_AI_GITHUB_REPO >& /tmp/repo_found_result.txt\nrepo_404=`grep -i \"error: 404\" /tmp/repo_found_result.txt `;\nrepo_not_reachable=`grep -i \"could not resolve\"  /tmp/repo_found_result.txt `;\nrepo_not_found_count=`grep -ci \"not found\"  /tmp/repo_found_result.txt `;\nif [[ \"$repo_not_found_count\" == \"1\" || \"$repo_404\" != \"\" || \"$repo_not_reachable\" != \"\" ]]; then\n  echo \"Error!! Provided Repo: $GEN_AI_GITHUB_REPO neither found nor reachable/resolvable, proceeding with S3 bucket\" >> ${DEBUG_DIR}/repo_reach.txt; \n  aws s3 cp ${DEBUG_DIR}/repo_reach.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n\n\n  cd /home/ec2-user; \n  aws s3 cp \"s3://${GEN_AI_S3_BUCKET}/${GEN_AI_CODE_SAMPLE_ZIP}\" /home/ec2-user/ 2> ${DEBUG_DIR}/s3_copy_codezip.txt;\n  aws s3 cp  ${DEBUG_DIR}/s3_copy_codezip.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n  \n  cd /home/ec2-user; mkdir gen-ai-extract; cd ./gen-ai-extract; unzip /home/ec2-user/${GEN_AI_CODE_SAMPLE_ZIP}  |& tee ${DEBUG_DIR}/zipfilelist.txt;  \n  echo \"Unzipped files list...\" >> ${DEBUG_DIR}/zipfilelist.txt; \n  aws s3 cp ${DEBUG_DIR}/zipfilelist.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n  \n  # Create a link so code base can be referred the same way for both github and zip file extract.\n  ln -s /home/ec2-user/gen-ai-extract /home/ec2-user/gen-ai;\n\n  mkdir /home/ec2-user/tmp-samples-folder;\n  cp -r sample-artifacts/* /home/ec2-user/tmp-samples-folder/;\n  \n  export LAMBDA_SRCS=/home/ec2-user/gen-ai-extract/lambda-srcs;\n\nelse\n  echo \"Provided Repo: $GEN_AI_GITHUB_REPO found reachable/resolvable, proceeding with Git clone\" >> ${DEBUG_DIR}/repo_reach.txt; \n  aws s3 cp ${DEBUG_DIR}/repo_reach.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n  \n  cd /home/ec2-user;\n  \n  git clone $GEN_AI_GITHUB_REPO gen_ai_samples;\n  # Create a link so code base can be referred the same way for both github and zip file extract.\n  ln -s /home/ec2-user/gen_ai_samples /home/ec2-user/gen-ai;\n\n  cd gen_ai_samples;\n  export LAMBDA_SRCS=/home/ec2-user/gen_ai_samples/lambda-srcs;\n  \n  mkdir /home/ec2-user/tmp-samples-folder;\n  cp -r sample-artifacts/* /home/ec2-user/tmp-samples-folder/;\n  \nfi;\n\npushd \"${LAMBDA_SRCS}/sagemaker-deployer-function\";\nsam build; sam package --s3-bucket \"${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" --region $AWS_DEFAULT_REGION > sagemaker-deployer-sam-package-output.txt;\nsagemaker_deployer_artifact=`grep CodeUri sagemaker-deployer-sam-package-output.txt | awk '{print $NF}' `;\naws s3 cp \"${sagemaker_deployer_artifact}\" \"s3://${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}/${GEN_AI_SM_DEPLOYER_LAMBDA_SAMPLE_ZIP}\";\necho \"Built and copied over Sagemaker Deployer lambda zip ${GEN_AI_SM_DEPLOYER_LAMBDA_SAMPLE_ZIP} into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" > ${DEBUG_DIR}/lambda_file_copies.txt;  \npopd;\n\npushd \"${LAMBDA_SRCS}/s3-bucket-cleanup-function\";\nsam build; sam package --s3-bucket \"${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" --region $AWS_DEFAULT_REGION > s3bucketcleanup-sam-package-output.txt;\ns3bucketcleanup_artifact=`grep CodeUri s3bucketcleanup-sam-package-output.txt | awk '{print $NF}' `;\naws s3 cp \"${s3bucketcleanup_artifact}\" \"s3://${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}/${GEN_AI_S3_BUCKET_CLEANUP_LAMBDA_SAMPLE_ZIP}\";\necho \"Built and copied over S3 Bucket Cleanup lambda zip ${GEN_AI_S3_BUCKET_CLEANUP_LAMBDA_SAMPLE_ZIP} into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" >> ${DEBUG_DIR}/lambda_file_copies.txt;  \npopd;\n\necho \"Copied over lambda zips into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" >> ${DEBUG_DIR}/lambda_file_copies.txt;  \naws s3 cp ${DEBUG_DIR}/lambda_file_copies.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\ncd /home/ec2-user;\n\n\npushd  /home/ec2-user/tmp-samples-folder/;\nfor subdir in `ls`; do aws s3 sync $subdir s3://${GEN_AI_SAMPLES_ARTIFACTS_TARGET_BUCKET}/$subdir; \necho \"Done copying contents of $subdir over to s3 sample artifacts bucket: ${GEN_AI_SAMPLES_ARTIFACTS_TARGET_BUCKET}\" >> ${DEBUG_DIR}/s3_copy_samplezip.txt; done;\n\ncd content-analyzer-samples;\nfor searchFile in `ls`; do aws s3 cp $searchFile s3://${GEN_AI_KENDRA_SAMPLES_TARGET_BUCKET}/; \necho \"Done copying $searchFile over to s3 kendra bucket: ${GEN_AI_KENDRA_SAMPLES_TARGET_BUCKET}\" >>  ${DEBUG_DIR}/s3_copy_samplezip.txt; done;\npopd;\naws s3 cp ${DEBUG_DIR}/s3_copy_samplezip.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n                  \n"
+                                            "\nsudo yum install -y gcc openssl-devel bzip2-devel libffi-devel zlib-devel;\ncd /tmp;\nwget https://www.python.org/ftp/python/3.9.6/Python-3.9.6.tgz;\ntar -xvf Python-3.9.6.tgz;\ncd Python-3.9.6;\n./configure --enable-optimizations;\nsudo make altinstall;\npython3.9 --version;\necho \"Installed Python3.9 on EC2\" > ${DEBUG_DIR}/python3.9_installed.txt;\naws s3 cp  ${DEBUG_DIR}/python3.9_installed.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n\ncd /tmp\nwget https://github.com/aws/aws-sam-cli/releases/latest/download/aws-sam-cli-linux-x86_64.zip;\nunzip aws-sam-cli-linux-x86_64.zip -d sam-install;\n./sam-install/install --update; export PATH=/usr/local/bin:$PATH;\necho \"Installed SAM on EC2\" > ${DEBUG_DIR}/sam_installed.txt;\naws s3 cp  ${DEBUG_DIR}/sam_installed.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n\ncurl $GEN_AI_GITHUB_REPO >& /tmp/repo_found_result.txt\nrepo_404=`grep -i \"error: 404\" /tmp/repo_found_result.txt `;\nrepo_not_reachable=`grep -i \"could not resolve\"  /tmp/repo_found_result.txt `;\nrepo_not_found_count=`grep -ci \"not found\"  /tmp/repo_found_result.txt `;\nif [[ \"$repo_not_found_count\" == \"1\" || \"$repo_404\" != \"\" || \"$repo_not_reachable\" != \"\" ]]; then\n  echo \"Error!! Provided Repo: $GEN_AI_GITHUB_REPO neither found nor reachable/resolvable, proceeding with S3 bucket\" >> ${DEBUG_DIR}/repo_reach.txt; \n  aws s3 cp ${DEBUG_DIR}/repo_reach.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n\n\n  cd /home/ec2-user; \n  aws s3 cp \"s3://${GEN_AI_S3_BUCKET}/${GEN_AI_CODE_SAMPLE_ZIP}\" /home/ec2-user/ 2> ${DEBUG_DIR}/s3_copy_codezip.txt;\n  aws s3 cp  ${DEBUG_DIR}/s3_copy_codezip.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n  \n  cd /home/ec2-user; mkdir gen-ai-extract; cd ./gen-ai-extract; unzip /home/ec2-user/${GEN_AI_CODE_SAMPLE_ZIP}  |& tee ${DEBUG_DIR}/zipfilelist.txt;  \n  echo \"Unzipped files list...\" >> ${DEBUG_DIR}/zipfilelist.txt; \n  aws s3 cp ${DEBUG_DIR}/zipfilelist.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n  \n  # Create a link so code base can be referred the same way for both github and zip file extract.\n  ln -s /home/ec2-user/gen-ai-extract /home/ec2-user/gen-ai;\n\n  mkdir /home/ec2-user/tmp-samples-folder;\n  cp -r sample-artifacts/* /home/ec2-user/tmp-samples-folder/;\n  \n  export LAMBDA_SRCS=/home/ec2-user/gen-ai-extract/lambda-srcs;\n  export LEX_BOT_SRC=/home/ec2-user/gen-ai-extract/lex-srcs;\n\nelse\n  echo \"Provided Repo: $GEN_AI_GITHUB_REPO found reachable/resolvable, proceeding with Git clone\" >> ${DEBUG_DIR}/repo_reach.txt; \n  aws s3 cp ${DEBUG_DIR}/repo_reach.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n  \n  cd /home/ec2-user;\n  \n  git clone $GEN_AI_GITHUB_REPO gen_ai_samples;\n  # Create a link so code base can be referred the same way for both github and zip file extract.\n  ln -s /home/ec2-user/gen_ai_samples /home/ec2-user/gen-ai;\n\n  cd gen_ai_samples;\n  export LAMBDA_SRCS=/home/ec2-user/gen_ai_samples/lambda-srcs;\n  export LEX_BOT_SRC=/home/ec2-user/gen_ai_samples/lex-srcs;\n\n  mkdir /home/ec2-user/tmp-samples-folder;\n  cp -r sample-artifacts/* /home/ec2-user/tmp-samples-folder/;\n  \nfi;\n\npushd \"${LAMBDA_SRCS}/sagemaker-deployer-function\";\nsam build; sam package --s3-bucket \"${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" --region $AWS_DEFAULT_REGION > sagemaker-deployer-sam-package-output.txt;\nsagemaker_deployer_artifact=`grep CodeUri sagemaker-deployer-sam-package-output.txt | awk '{print $NF}' `;\naws s3 cp \"${sagemaker_deployer_artifact}\" \"s3://${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}/${GEN_AI_SM_DEPLOYER_LAMBDA_SAMPLE_ZIP}\";\necho \"Built and copied over Sagemaker Deployer lambda zip ${GEN_AI_SM_DEPLOYER_LAMBDA_SAMPLE_ZIP} into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" > ${DEBUG_DIR}/lambda_file_copies.txt;  \npopd;\n\npushd \"${LAMBDA_SRCS}/s3-bucket-cleanup-function\";\nsam build; sam package --s3-bucket \"${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" --region $AWS_DEFAULT_REGION > s3bucketcleanup-sam-package-output.txt;\ns3bucketcleanup_artifact=`grep CodeUri s3bucketcleanup-sam-package-output.txt | awk '{print $NF}' `;\naws s3 cp \"${s3bucketcleanup_artifact}\" \"s3://${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}/${GEN_AI_S3_BUCKET_CLEANUP_LAMBDA_SAMPLE_ZIP}\";\necho \"Built and copied over S3 Bucket Cleanup lambda zip ${GEN_AI_S3_BUCKET_CLEANUP_LAMBDA_SAMPLE_ZIP} into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" >> ${DEBUG_DIR}/lambda_file_copies.txt;  \npopd;\n\npushd \"${LAMBDA_SRCS}/lex-fulfillment-function\";\nsam build; sam package --s3-bucket \"${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" --region $AWS_DEFAULT_REGION > lexfulfillment-sam-package-output.txt;\nlexfulfillment_artifact=`grep CodeUri lexfulfillment-sam-package-output.txt | awk '{print $NF}' `;\naws s3 cp \"${lexfulfillment_artifact}\" \"s3://${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}/${GEN_AI_LEXBOT_LAMBDA_SAMPLE_ZIP}\";\necho \"Built and copied over Lex Fulfillment lambda zip ${GEN_AI_LEXBOT_LAMBDA_SAMPLE_ZIP} into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" >> ${DEBUG_DIR}/lambda_file_copies.txt;  \npopd;\n\npushd \"${LAMBDA_SRCS}/lex-rag-lambda-function\";\nsam build; sam package --s3-bucket \"${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" --region $AWS_DEFAULT_REGION > lexbot-rag-sam-package-output.txt;\nlexbotraglambda_artifact=`grep CodeUri lexbot-rag-sam-package-output.txt | awk '{print $NF}' `;\naws s3 cp \"${lexbotraglambda_artifact}\" \"s3://${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}/${GEN_AI_LEXBOT_RAG_LAMBDA_SAMPLE_ZIP}\";\necho \"Built and copied over LexBot Rag lambda zip ${GEN_AI_LEXBOT_RAG_LAMBDA_SAMPLE_ZIP} into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" >> ${DEBUG_DIR}/lambda_file_copies.txt;  \npopd;\n\n\necho \"Copied over lambda zips into the lambda folder ${GEN_AI_LAMBDA_ARTIFACTS_S3_BUCKET}\" >> ${DEBUG_DIR}/lambda_file_copies.txt;  \naws s3 cp ${DEBUG_DIR}/lambda_file_copies.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\ncd /home/ec2-user;\n\npushd \"${LEX_BOT_SRC}\";\nzip -r  /home/ec2-user/${GEN_AI_LEXBOT_SAMPLE_ZIP} .;\naws s3 cp \"/home/ec2-user/${GEN_AI_LEXBOT_SAMPLE_ZIP}\" \"s3://${GEN_AI_LEXBOT_TARGET_BUCKET}\";\necho \"Built and copied over Lex Bot zip ${GEN_AI_LEXBOT_SAMPLE_ZIP} into the S3 Bucket ${GEN_AI_LEXBOT_TARGET_BUCKET}\" > ${DEBUG_DIR}/lex_bot_file_copies.txt;  \npopd;\n\n\npushd  /home/ec2-user/tmp-samples-folder/;\nfor subdir in `ls`; do aws s3 sync $subdir s3://${GEN_AI_SAMPLES_ARTIFACTS_TARGET_BUCKET}/$subdir; \necho \"Done copying contents of $subdir over to s3 sample artifacts bucket: ${GEN_AI_SAMPLES_ARTIFACTS_TARGET_BUCKET}\" >> ${DEBUG_DIR}/s3_copy_samplezip.txt; done;\n\ncd content-analyzer-samples;\nfor searchFile in `ls`; do aws s3 cp $searchFile s3://${GEN_AI_KENDRA_SAMPLES_TARGET_BUCKET}/; \necho \"Done copying $searchFile over to s3 kendra bucket: ${GEN_AI_KENDRA_SAMPLES_TARGET_BUCKET}\" >>  ${DEBUG_DIR}/s3_copy_samplezip.txt; done;\npopd;\naws s3 cp ${DEBUG_DIR}/s3_copy_samplezip.txt \"s3://${GEN_AI_LOG_BUCKET}/${DEBUG_LOG_PATH}/\" ;\n                  \n"
                                         ]
                                     ]
                                 }
@@ -2872,7 +3016,37 @@
                             {
                                 "Name": "POOL_DOMAIN_NAME",
                                 "Value": {
-                                    "Ref": "CognitoDomain"
+                                    "Fn::Join": [
+                                        "-",
+                                        [
+                                            {
+                                                "Fn::Sub": "genai-cog"
+                                            },
+                                            {
+                                                "Fn::Select": [
+                                                    0,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "-",
+                                                            {
+                                                                "Fn::Select": [
+                                                                    2,
+                                                                    {
+                                                                        "Fn::Split": [
+                                                                            "/",
+                                                                            {
+                                                                                "Ref": "AWS::StackId"
+                                                                            }
+                                                                        ]
+                                                                    }
+                                                                ]
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    ]
                                 }
                             },
                             {
@@ -2943,6 +3117,12 @@
                                 }
                             },
                             {
+                                "Name": "genai_chat_store",
+                                "Value": {
+                                    "Ref": "GenAIChatStoreDynamoDBTable"
+                                }
+                            },
+                            {
                                 "Name": "im_endpoint_name",
                                 "Value": {
                                     "Ref": "StableDiffusionModelEndpointId"
@@ -2956,21 +3136,11 @@
                             },
                             {
                                 "Name": "fsi_index_id",
-                                "Value": {
-                                    "Fn::GetAtt": [
-                                        "GenAIKendraIndex",
-                                        "Id"
-                                    ]
-                                }
+                                "Value": ""
                             },
                             {
                                 "Name": "legal_index_id",
-                                "Value": {
-                                    "Fn::GetAtt": [
-                                        "GenAIKendraIndex",
-                                        "Id"
-                                    ]
-                                }
+                                "Value": ""
                             },
                             {
                                 "Name": "bucket",
@@ -3018,12 +3188,7 @@
                             },
                             {
                                 "Name": "travel_index_id",
-                                "Value": {
-                                    "Fn::GetAtt": [
-                                        "GenAIKendraIndex",
-                                        "Id"
-                                    ]
-                                }
+                                "Value": ""
                             },
                             {
                                 "Name": "campaign_arn",
@@ -3037,21 +3202,11 @@
                             },
                             {
                                 "Name": "energy_index_id",
-                                "Value": {
-                                    "Fn::GetAtt": [
-                                        "GenAIKendraIndex",
-                                        "Id"
-                                    ]
-                                }
+                                "Value": ""
                             },
                             {
                                 "Name": "ls_index_id",
-                                "Value": {
-                                    "Fn::GetAtt": [
-                                        "GenAIKendraIndex",
-                                        "Id"
-                                    ]
-                                }
+                                "Value": ""
                             },
                             {
                                 "Name": "PREFER_MODEL_FAMILY",
@@ -3496,6 +3651,128 @@
                 ]
             }
         },
+        "GenAIChatStoreDynamoDBTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "UpdateReplacePolicy": "Retain",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+                "TableName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "genai-chat-store",
+                            {
+                                "Fn::Select": [
+                                    3,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                },
+                "BillingMode": "PAY_PER_REQUEST",
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "session",
+                        "AttributeType": "S"
+                    }
+                ],
+                "KeySchema": [
+                    {
+                        "AttributeName": "session",
+                        "KeyType": "HASH"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "genai-chat-store"
+                    }
+                ]
+            }
+        },
+        "LexHotelReservationsDynamoDBTable": {
+            "Type": "AWS::DynamoDB::Table",
+            "UpdateReplacePolicy": "Retain",
+            "DeletionPolicy": "Retain",
+            "Properties": {
+                "TableName": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            "lex-hotel-reservations",
+                            {
+                                "Fn::Select": [
+                                    3,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                },
+                "BillingMode": "PAY_PER_REQUEST",
+                "AttributeDefinitions": [
+                    {
+                        "AttributeName": "ReservationNr",
+                        "AttributeType": "S"
+                    },
+                    {
+                        "AttributeName": "City",
+                        "AttributeType": "S"
+                    }
+                ],
+                "KeySchema": [
+                    {
+                        "AttributeName": "ReservationNr",
+                        "KeyType": "HASH"
+                    },
+                    {
+                        "AttributeName": "City",
+                        "KeyType": "RANGE"
+                    }
+                ],
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": "lex-hotel-reservations"
+                    }
+                ]
+            }
+        },
         "GenAIDDBRolePolicy": {
             "Type": "AWS::IAM::ManagedPolicy",
             "Properties": {
@@ -3524,6 +3801,18 @@
                                 {
                                     "Fn::GetAtt": [
                                         "GenAISelfServiceHistoryDynamoDBTable",
+                                        "Arn"
+                                    ]
+                                },
+                                {
+                                    "Fn::GetAtt": [
+                                        "GenAIChatStoreDynamoDBTable",
+                                        "Arn"
+                                    ]
+                                },
+                                {
+                                    "Fn::GetAtt": [
+                                        "LexHotelReservationsDynamoDBTable",
                                         "Arn"
                                     ]
                                 }
@@ -3823,6 +4112,412 @@
                     }
                 ]
             }
+        },
+        "LexGenAIBotBucket": {
+            "Type": "AWS::S3::Bucket"
+        },
+        "S3BotImportRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ec2.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore",
+                    "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy",
+                    "arn:aws:iam::aws:policy/AmazonLexFullAccess"
+                ],
+                "Path": "/"
+            }
+        },
+        "S3Policy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": "S3Policy",
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "s3:GetBucketLocation",
+                                "s3:GetObject",
+                                "s3:GetObjectAcl",
+                                "s3:PutObject",
+                                "s3:PutObjectAcl",
+                                "s3:ListBucket*"
+                            ],
+                            "Resource": [
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAICodeBootstrapBucketName"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAICodeBootstrapBucketName"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAILambdaArtifactsS3Bucket"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAILambdaArtifactsS3Bucket"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAITestS3Bucket"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAITestS3Bucket"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "LoggingBucket"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "LoggingBucket"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "LexGenAIBotBucket"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "LexGenAIBotBucket"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAISearchInterpreterS3Bucket"
+                                            }
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:aws:s3:::",
+                                            {
+                                                "Ref": "GenAISearchInterpreterS3Bucket"
+                                            },
+                                            "/*"
+                                        ]
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "Roles": [
+                    {
+                        "Ref": "S3EC2ImportRole"
+                    },
+                    {
+                        "Ref": "S3BotImportRole"
+                    }
+                ]
+            }
+        },
+        "BotRuntimeRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "lexv2.amazonaws.com"
+                                ]
+                            },
+                            "Action": [
+                                "sts:AssumeRole"
+                            ]
+                        }
+                    ]
+                },
+                "Path": "/",
+                "ManagedPolicyArns": [
+                    "arn:aws:iam::aws:policy/AmazonLexFullAccess"
+                ],
+                "Policies": [
+                    {
+                        "PolicyName": "LexRuntimeRolePolicy",
+                        "PolicyDocument": {
+                            "Version": "2012-10-17",
+                            "Statement": [
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "comprehend:DetectSentiment"
+                                    ],
+                                    "Resource": "*"
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "bedrock:InvokeModel"
+                                    ],
+                                    "Resource": {
+                                        "Fn::Sub": "arn:aws:bedrock:${AWS::Region}::foundation-model/*"
+                                    }
+                                },
+                                {
+                                    "Effect": "Allow",
+                                    "Action": [
+                                        "bedrock:Retrieve"
+                                    ],
+                                    "Resource": {
+                                        "Fn::Sub": "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:knowledge-base/*"
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        "LexGenAIBot": {
+            "Type": "AWS::Lex::Bot",
+            "DependsOn": "HelperEC2Instance",
+            "Properties": {
+                "AutoBuildBotLocales": false,
+                "BotFileS3Location": {
+                    "S3Bucket": {
+                        "Ref": "LexGenAIBotBucket"
+                    },
+                    "S3ObjectKey": {
+                        "Ref": "LexGenAIBotSrcZip"
+                    }
+                },
+                "BotLocales": [
+                    {
+                        "LocaleId": "en_US",
+                        "NluConfidenceThreshold": 0.4,
+                        "VoiceSettings": {
+                            "VoiceId": "Ivy"
+                        }
+                    }
+                ],
+                "DataPrivacy": {
+                    "ChildDirected": false
+                },
+                "Description": "String",
+                "IdleSessionTTLInSeconds": 300,
+                "Name": {
+                    "Fn::Join": [
+                        "-",
+                        [
+                            {
+                                "Ref": "LexBotName"
+                            },
+                            {
+                                "Fn::Select": [
+                                    3,
+                                    {
+                                        "Fn::Split": [
+                                            "-",
+                                            {
+                                                "Fn::Select": [
+                                                    2,
+                                                    {
+                                                        "Fn::Split": [
+                                                            "/",
+                                                            {
+                                                                "Ref": "AWS::StackId"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                },
+                "RoleArn": {
+                    "Fn::GetAtt": [
+                        "BotRuntimeRole",
+                        "Arn"
+                    ]
+                }
+            }
+        },
+        "LexGenAIBotVersion": {
+            "Type": "AWS::Lex::BotVersion",
+            "Properties": {
+                "BotId": {
+                    "Ref": "LexGenAIBot"
+                },
+                "BotVersionLocaleSpecification": [
+                    {
+                        "LocaleId": "en_US",
+                        "BotVersionLocaleDetails": {
+                            "SourceBotVersion": "DRAFT"
+                        }
+                    }
+                ],
+                "Description": "LexGenAIBot Version"
+            }
+        },
+        "LexGenAIBotAlias": {
+            "Type": "AWS::Lex::BotAlias",
+            "DependsOn": "LexGenAIBotVersion",
+            "Properties": {
+                "BotId": {
+                    "Ref": "LexGenAIBot"
+                },
+                "BotAliasName": {
+                    "Ref": "LexBotAlias"
+                },
+                "BotVersion": 1,
+                "SentimentAnalysisSettings": {
+                    "DetectSentiment": true
+                },
+                "BotAliasLocaleSettings": [
+                    {
+                        "BotAliasLocaleSetting": {
+                            "CodeHookSpecification": {
+                                "LambdaCodeHook": {
+                                    "CodeHookInterfaceVersion": "1.0",
+                                    "LambdaArn": {
+                                        "Fn::GetAtt": [
+                                            "LexBotRagLambda",
+                                            "Arn"
+                                        ]
+                                    }
+                                }
+                            },
+                            "Enabled": true
+                        },
+                        "LocaleId": "en_US"
+                    }
+                ]
+            }
+        },
+        "LexBotInvokeLambdaPermission": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Fn::GetAtt": [
+                        "LexBotRagLambda",
+                        "Arn"
+                    ]
+                },
+                "Principal": "lexv2.amazonaws.com",
+                "SourceArn": {
+                    "Fn::Join": [
+                        "/",
+                        [
+                            {
+                                "Fn::Sub": "arn:aws:lex:${AWS::Region}:${AWS::AccountId}:bot-alias"
+                            },
+                            {
+                                "Ref": "LexGenAIBot"
+                            },
+                            "*"
+                        ]
+                    ]
+                }
+            }
         }
     },
     "Outputs": {
@@ -3843,12 +4538,6 @@
                 "Ref": "GenAISearchInterpreterS3Bucket"
             },
             "Description": "S3 Bucket containing the example inputs for search interpreter use case. Extract and upload the documents into the same S3 bucket and then sync the preconfigured Kendra index against its S3Datasource (configured to read from this bucket) \n"
-        },
-        "KendraIndex": {
-            "Value": {
-                "Ref": "GenAIKendraIndex"
-            },
-            "Description": "Kendra index for ingesting samples from S3 datasource"
         },
         "StableDiffusionEndpoint": {
             "Description": "Jumpstart StableDiffusion Endpoint",
@@ -3981,7 +4670,40 @@
         },
         "HostedUILoginURL": {
             "Value": {
-                "Fn::Sub": "https://${CognitoDomain}.auth.${AWS::Region}.amazoncognito.com/login?client_id=${UserPoolClient}&response_type=code&scope=email+openid+phone+profile&redirect_uri=https://${GenAISamplesCFDistribution.DomainName}"
+                "Fn::Join": [
+                    "-",
+                    [
+                        {
+                            "Fn::Sub": "genai-cog"
+                        },
+                        {
+                            "Fn::Select": [
+                                0,
+                                {
+                                    "Fn::Split": [
+                                        "-",
+                                        {
+                                            "Fn::Select": [
+                                                2,
+                                                {
+                                                    "Fn::Split": [
+                                                        "/",
+                                                        {
+                                                            "Ref": "AWS::StackId"
+                                                        }
+                                                    ]
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "Fn::Sub": ".auth.${AWS::Region}.amazoncognito.com/login?client_id=${UserPoolClient}&response_type=code&scope=email+openid+phone+profile&redirect_uri=https://${GenAISamplesCFDistribution.DomainName}"
+                        }
+                    ]
+                ]
             },
             "Description": "The Cognito Hosted UI URL"
         },
