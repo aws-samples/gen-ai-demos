@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# EDIT following paramters
+# EDIT following paramters with correct values, including region
 export STACK_ID=EDIT_ME
 export AWS_ACCOUNT_ID=EDIT_ME
 export AWS_DEFAULT_REGION=us-east-1
